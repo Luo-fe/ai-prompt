@@ -62,6 +62,10 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 .container {
@@ -642,7 +646,6 @@ body {
 }
 
 .no-prompts {
-  grid-column: 1 / -1;
   text-align: center;
   padding: 3rem 2rem;
   color: var(--text-muted);
@@ -876,8 +879,10 @@ body {
 
 .btn-large {
   width: 100%;
-  padding: 0.65rem;
-  font-size: 0.9rem;
+  padding: 0.7rem 1.2rem;
+  font-size: 0.88rem;
+  min-height: 42px;
+  font-weight: 600;
 }
 
 .random-section {
@@ -1127,13 +1132,6 @@ body {
   padding: 0.25rem 0.6rem;
   min-height: 30px;
   gap: 0.3rem;
-}
-
-.btn-large {
-  font-size: 0.88rem;
-  padding: 0.7rem 1.2rem;
-  min-height: 42px;
-  font-weight: 600;
 }
 
 .btn-icon {
@@ -1433,11 +1431,6 @@ body {
   animation: pulse 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-@keyframes slideInRight {
-  from { transform: translateX(20px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
-}
-
 @keyframes notifSlideIn {
   from { transform: translateX(100%) scale(0.9); opacity: 0; }
   to { transform: translateX(0) scale(1); opacity: 1; }
@@ -1689,21 +1682,6 @@ input:focus + .slider {
 
 input:checked + .slider:before {
   transform: translateX(20px);
-}
-
-.slider.round {
-  border-radius: 24px;
-}
-
-.slider.round:before {
-  border-radius: 50%;
-}
-
-body {
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
 }
 
 body.has-bg-image .main-content {
@@ -1964,4 +1942,8 @@ body.has-bg-image .navbar {
 .notification-info {
   background: linear-gradient(135deg, #3b82f6, #2563eb);
   color: white;
+}
+
+.hidden-input {
+  display: none;
 }

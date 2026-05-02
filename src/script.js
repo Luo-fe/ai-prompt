@@ -100,6 +100,20 @@ function findPromptIndex(arr, text) {
   return arr.findIndex(p => pt(p) === text);
 }
 
+function updatePromptTranslation(categoryId, promptText, newTranslation) {
+  const category = appState.categories.find(cat => cat.id === categoryId);
+  if (category) {
+    const cp = findPromptInCategory(category, promptText);
+    if (cp && typeof cp === 'object') cp.translation = newTranslation;
+  }
+  if (appState.selectedPrompts[categoryId]) {
+    const idx = findPromptIndex(appState.selectedPrompts[categoryId], promptText);
+    if (idx !== -1 && typeof appState.selectedPrompts[categoryId][idx] === 'object') {
+      appState.selectedPrompts[categoryId][idx].translation = newTranslation;
+    }
+  }
+}
+
 let appState = {
   categories: [],
   selectedCategoryId: null,
@@ -172,7 +186,6 @@ const elements = {
   bgClearBtn: document.getElementById('bg-clear-btn'),
   bgFileInput: document.getElementById('bg-file-input'),
   bgPreviewContainer: document.getElementById('bg-preview-container'),
-  bgPreviewPlaceholder: document.getElementById('bg-preview-placeholder'),
   panelOpacitySlider: document.getElementById('panel-opacity-slider'),
   panelOpacityValue: document.getElementById('panel-opacity-value'),
   bgImageOverlay: document.getElementById('bg-image-overlay'),
@@ -186,13 +199,6 @@ async function initApp() {
     loadTranslations();
     loadSettings();
     await migrateData();
-    renderCategoryList();
-    renderRandomCategorySelector();
-    bindEvents();
-    bindSettingsEvents();
-    applyBackgroundSettings();
-    renderExamples();
-    initPreviewPanelResize();
   } catch (error) {
     console.error('Init failed:', error);
     if (!appState.categories || appState.categories.length === 0) {
@@ -201,11 +207,14 @@ async function initApp() {
     if (!appState.selectedPrompts) appState.selectedPrompts = {};
     if (!appState.nextCategoryId) appState.nextCategoryId = 1;
     saveData();
-    renderCategoryList();
-    renderRandomCategorySelector();
-    bindEvents();
-    bindSettingsEvents();
   }
+  renderCategoryList();
+  renderRandomCategorySelector();
+  bindEvents();
+  bindSettingsEvents();
+  applyBackgroundSettings();
+  renderExamples();
+  initPreviewPanelResize();
 }
 
 function loadData() {
@@ -559,7 +568,7 @@ function loadTranslations() {
   } catch (e) { /* ignore */ }
 }
 
-const saveData = function() {
+function saveData() {
   try {
     localStorage.setItem('aiPromptToolData', JSON.stringify({
       categories: appState.categories,
@@ -569,7 +578,7 @@ const saveData = function() {
   } catch (error) {
     if (error.name === 'QuotaExceededError') showNotification('存储空间不足，请清理浏览器缓存', 'error');
   }
-};
+}
 
 function saveSettingsToStorage() {
   try {
@@ -738,17 +747,7 @@ function startEditTranslation(categoryId, prompt, translationElement) {
     if (editSaved) return;
     editSaved = true;
     const newTranslation = input.value.trim();
-    const category = appState.categories.find(cat => cat.id === categoryId);
-    if (category) {
-      const cp = findPromptInCategory(category, currentText);
-      if (cp && typeof cp === 'object') cp.translation = newTranslation;
-    }
-    if (appState.selectedPrompts[categoryId]) {
-      const idx = findPromptIndex(appState.selectedPrompts[categoryId], currentText);
-      if (idx !== -1 && typeof appState.selectedPrompts[categoryId][idx] === 'object') {
-        appState.selectedPrompts[categoryId][idx].translation = newTranslation;
-      }
-    }
+    updatePromptTranslation(categoryId, currentText, newTranslation);
     translationElement.textContent = newTranslation;
     saveData(); renderSelectedPrompts(); renderPreview();
     if (newTranslation) showNotification('翻译已更新', 'success');
@@ -773,17 +772,7 @@ async function inlineTranslatePrompt(categoryId, prompt, translationElement) {
   try {
     const translation = await translateText(currentText);
     if (translation) {
-      const category = appState.categories.find(cat => cat.id === categoryId);
-      if (category) {
-        const cp = findPromptInCategory(category, currentText);
-        if (cp && typeof cp === 'object') cp.translation = translation;
-      }
-      if (appState.selectedPrompts[categoryId]) {
-        const idx = findPromptIndex(appState.selectedPrompts[categoryId], currentText);
-        if (idx !== -1 && typeof appState.selectedPrompts[categoryId][idx] === 'object') {
-          appState.selectedPrompts[categoryId][idx].translation = translation;
-        }
-      }
+      updatePromptTranslation(categoryId, currentText, translation);
       translationElement.textContent = translation;
       translationElement.style.opacity = '';
       saveData(); renderSelectedPrompts(); renderPreview();
@@ -867,7 +856,7 @@ function renderSelectedPrompts() {
 }
 
 function getSelectedPromptsCount() {
-  return Object.values(appState.selectedPrompts).reduce((total, prompts) => total + prompts.length, 0);
+  return Object.values(appState.selectedPrompts).flat().length;
 }
 
 function renderPreview() {
@@ -879,13 +868,10 @@ function renderPreview() {
   const allPrompts = getAllSelectedPrompts();
   elements.previewOutput.textContent = allPrompts.join(', ');
   if (appState.settings.translationEnabled && appState.settings.showTranslationInPreview) {
-    const allTranslations = [];
-    Object.keys(appState.selectedPrompts).forEach(categoryId => {
-      appState.selectedPrompts[categoryId].forEach(p => {
-        const t = ptrans(p);
-        if (t) allTranslations.push(t);
-      });
-    });
+    const allTranslations = Object.values(appState.selectedPrompts)
+      .flat()
+      .map(p => ptrans(p))
+      .filter(Boolean);
     if (allTranslations.length > 0) {
       const div = document.createElement('div');
       div.className = 'preview-translation'; div.textContent = allTranslations.join('，');
@@ -1246,7 +1232,7 @@ function saveSettings() {
   if (elements.panelOpacitySlider) appState.settings.panelOpacity = parseInt(elements.panelOpacitySlider.value);
   if (elements.panelStyleFrosted && elements.panelStyleFrosted.checked) appState.settings.panelStyle = 'frosted';
   else if (elements.panelStyleTransparent && elements.panelStyleTransparent.checked) appState.settings.panelStyle = 'transparent';
-  localStorage.setItem('aiPromptToolSettings', JSON.stringify(appState.settings));
+  saveSettingsToStorage();
   applyBackgroundSettings();
   elements.settingsModal.style.display = 'none';
   showNotification('设置已保存', 'success');
@@ -1592,8 +1578,7 @@ function bindSettingsEvents() {
 }
 
 function generateRandomPrompts() {
-  const selectedIds = [];
-  document.querySelectorAll('#random-category-selector input[type="checkbox"]:checked').forEach(cb => selectedIds.push(cb.value));
+  const selectedIds = [...document.querySelectorAll('#random-category-selector input[type="checkbox"]:checked')].map(cb => cb.value);
   if (selectedIds.length === 0) { showRandomResult('请至少选择一个类别', 'error'); return; }
 
   const generated = {}, allPrompts = [];
@@ -1689,7 +1674,7 @@ function handleBgImageUpload(event) {
   const reader = new FileReader();
   reader.onload = e => {
     appState.settings.backgroundImage = e.target.result;
-    localStorage.setItem('aiPromptToolSettings', JSON.stringify(appState.settings));
+    saveSettingsToStorage();
     applyBackgroundSettings(); updateBgPreview();
     showNotification('背景图片已设置', 'success');
   };
@@ -1699,7 +1684,7 @@ function handleBgImageUpload(event) {
 
 function clearBgImage() {
   appState.settings.backgroundImage = '';
-  localStorage.setItem('aiPromptToolSettings', JSON.stringify(appState.settings));
+  saveSettingsToStorage();
   applyBackgroundSettings(); updateBgPreview();
   showNotification('背景图片已清除', 'success');
 }
@@ -1718,17 +1703,18 @@ function initPreviewPanelResize() {
   const promptsHandle = document.getElementById('selected-prompts-resize-handle');
   const promptsBox = document.getElementById('selected-prompts');
 
-  if (panelHandle && panel) {
+  function createResizeHandler(handle, target, direction, minSize, maxSize) {
     let isResizing = false;
-    let startX = 0;
-    let startWidth = 0;
+    let startPos = 0;
+    let startSize = 0;
+    const isHorizontal = direction === 'horizontal';
 
-    panelHandle.addEventListener('mousedown', e => {
+    handle.addEventListener('mousedown', e => {
       isResizing = true;
-      startX = e.clientX;
-      startWidth = panel.offsetWidth;
-      panelHandle.classList.add('active');
-      document.body.style.cursor = 'ew-resize';
+      startPos = isHorizontal ? e.clientX : e.clientY;
+      startSize = isHorizontal ? target.offsetWidth : target.offsetHeight;
+      handle.classList.add('active');
+      document.body.style.cursor = isHorizontal ? 'ew-resize' : 'ns-resize';
       document.body.style.userSelect = 'none';
       e.preventDefault();
       e.stopPropagation();
@@ -1736,51 +1722,23 @@ function initPreviewPanelResize() {
 
     document.addEventListener('mousemove', e => {
       if (!isResizing) return;
-      const diff = e.clientX - startX;
-      const newWidth = Math.min(Math.max(startWidth + diff, 240), 500);
-      panel.style.width = newWidth + 'px';
+      const diff = (isHorizontal ? e.clientX : e.clientY) - startPos;
+      const newSize = Math.min(Math.max(startSize + diff, minSize), maxSize);
+      if (isHorizontal) target.style.width = newSize + 'px';
+      else target.style.height = newSize + 'px';
     });
 
     document.addEventListener('mouseup', () => {
       if (!isResizing) return;
       isResizing = false;
-      panelHandle.classList.remove('active');
+      handle.classList.remove('active');
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     });
   }
 
-  if (promptsHandle && promptsBox) {
-    let isResizing = false;
-    let startY = 0;
-    let startHeight = 0;
-
-    promptsHandle.addEventListener('mousedown', e => {
-      isResizing = true;
-      startY = e.clientY;
-      startHeight = promptsBox.offsetHeight;
-      promptsHandle.classList.add('active');
-      document.body.style.cursor = 'ns-resize';
-      document.body.style.userSelect = 'none';
-      e.preventDefault();
-      e.stopPropagation();
-    });
-
-    document.addEventListener('mousemove', e => {
-      if (!isResizing) return;
-      const diff = e.clientY - startY;
-      const newHeight = Math.min(Math.max(startHeight + diff, 60), 500);
-      promptsBox.style.height = newHeight + 'px';
-    });
-
-    document.addEventListener('mouseup', () => {
-      if (!isResizing) return;
-      isResizing = false;
-      promptsHandle.classList.remove('active');
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    });
-  }
+  if (panelHandle && panel) createResizeHandler(panelHandle, panel, 'horizontal', 240, 500);
+  if (promptsHandle && promptsBox) createResizeHandler(promptsHandle, promptsBox, 'vertical', 60, 500);
 }
 
 document.addEventListener('DOMContentLoaded', initApp);

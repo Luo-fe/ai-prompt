@@ -185,7 +185,7 @@
                         <option value="; ">分号 (;)</option>
                         <option value="custom">自定义</option>
                     </select>
-                    <input type="text" id="custom-delimiter" placeholder="自定义分隔符" style="display: none;">
+                    <input type="text" id="custom-delimiter" placeholder="自定义分隔符" class="hidden-input">
                 </div>
                 <div class="form-group">
                     <label for="export-preview">导出预览:</label>
@@ -227,7 +227,7 @@
                             <button id="bg-clear-btn" class="btn btn-danger btn-small">
                                 <i class="fa fa-trash"></i> 清除背景
                             </button>
-                            <input type="file" id="bg-file-input" accept=".jpg,.jpeg,.png,.bmp,.webp,.gif" style="display: none;">
+                            <input type="file" id="bg-file-input" accept=".jpg,.jpeg,.png,.bmp,.webp,.gif" class="hidden-input">
                         </div>
                         <div class="panel-style-control">
                             <label>面板风格:</label>
@@ -295,11 +295,11 @@
                     <button id="clean-duplicates-btn" class="btn btn-warning">清理重复提示词</button>
                     <button id="export-all-data-btn" class="btn btn-info">导出所有数据</button>
                     <button id="import-data-btn" class="btn btn-info">导入数据</button>
-                    <input type="file" id="import-file-input" accept=".json" style="display: none;">
+                    <input type="file" id="import-file-input" accept=".json" class="hidden-input">
                     <hr style="margin: 0.75rem 0; border: none; border-top: 1px solid var(--border-color);">
                     <button id="export-csv-btn" class="btn btn-info">导出CSV</button>
                     <button id="import-csv-btn" class="btn btn-info">导入CSV</button>
-                    <input type="file" id="import-csv-file-input" accept=".csv" style="display: none;">
+                    <input type="file" id="import-csv-file-input" accept=".csv" class="hidden-input">
                 </div>
             </div>
             <div class="modal-footer">
