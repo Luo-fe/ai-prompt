@@ -706,7 +706,7 @@ function renderPromptList(categoryId) {
 
     item.appendChild(cb); item.appendChild(textContainer);
     item.addEventListener('click', e => {
-      if (e.target !== cb && !e.target.closest('.editable-translation') && !e.target.closest('.inline-translate-btn')) {
+      if (e.target !== cb && !e.target.closest('.editable-translation') && !e.target.closest('.inline-translate-btn') && !e.target.closest('.translation-edit-input')) {
         cb.checked = !cb.checked;
         togglePrompt(category.id, prompt);
         item.classList.toggle('selected', isPromptSelected(category.id, prompt));
@@ -753,6 +753,8 @@ function startEditTranslation(categoryId, prompt, translationElement) {
     else if (e.key === 'Escape') { editSaved = true; translationElement.textContent = currentTranslation; }
   });
   input.addEventListener('blur', saveEdit);
+  input.addEventListener('click', e => e.stopPropagation());
+  input.addEventListener('mousedown', e => e.stopPropagation());
   translationElement.textContent = '';
   translationElement.appendChild(input);
   input.focus(); input.select();

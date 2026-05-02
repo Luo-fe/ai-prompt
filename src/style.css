@@ -525,7 +525,6 @@ body {
   word-wrap: break-word;
   white-space: normal;
   flex: 1;
-  user-select: none;
   font-weight: 400;
 }
 
@@ -579,6 +578,9 @@ body {
   font-style: italic;
   -webkit-app-region: no-drag;
   user-select: text;
+  cursor: text;
+  position: relative;
+  z-index: 2;
 }
 
 .translation-edit-input:focus {
@@ -1618,11 +1620,6 @@ input:checked + .slider:before {
 
 .slider.round:before {
   border-radius: 50%;
-}
-
-.translation-edit-input {
-  -webkit-app-region: no-drag;
-  user-select: text;
 }
 
 body {
