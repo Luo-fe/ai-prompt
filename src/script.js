@@ -192,6 +192,7 @@ async function initApp() {
     bindSettingsEvents();
     applyBackgroundSettings();
     renderExamples();
+    initPreviewPanelResize();
   } catch (error) {
     console.error('Init failed:', error);
     if (!appState.categories || appState.categories.length === 0) {
@@ -1709,6 +1710,41 @@ function updateBgPreview() {
   container.innerHTML = appState.settings.backgroundImage
     ? `<img src="${appState.settings.backgroundImage}" alt="背景预览">`
     : '<span class="bg-preview-placeholder">未设置背景图片</span>';
+}
+
+function initPreviewPanelResize() {
+  const handle = document.getElementById('preview-resize-handle');
+  const panel = document.querySelector('.preview-panel');
+  if (!handle || !panel) return;
+
+  let isResizing = false;
+  let startX = 0;
+  let startWidth = 0;
+
+  handle.addEventListener('mousedown', e => {
+    isResizing = true;
+    startX = e.clientX;
+    startWidth = panel.offsetWidth;
+    handle.classList.add('active');
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!isResizing) return;
+    const diff = e.clientX - startX;
+    const newWidth = Math.min(Math.max(startWidth + diff, 240), 500);
+    panel.style.width = newWidth + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!isResizing) return;
+    isResizing = false;
+    handle.classList.remove('active');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
 }
 
 document.addEventListener('DOMContentLoaded', initApp);

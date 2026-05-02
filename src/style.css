@@ -656,26 +656,44 @@ body {
 
 .preview-panel {
   width: 290px;
+  min-width: 240px;
+  max-width: 500px;
   background: var(--panel-bg);
   border-radius: var(--border-radius-lg);
   box-shadow: var(--shadow-sm);
   padding: 0.85rem;
   display: flex;
   flex-direction: column;
-  height: fit-content;
-  max-height: calc(100vh - 72px);
   position: sticky;
   top: 68px;
   border: 1px solid rgba(226, 232, 240, var(--border-alpha));
   backdrop-filter: var(--panel-backdrop);
   -webkit-backdrop-filter: var(--panel-backdrop);
-  transition: var(--transition);
+  transition: box-shadow var(--transition);
   animation: panelSlideRight 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s both;
+  max-height: calc(100vh - 72px);
   overflow-y: auto;
 }
 
 .preview-panel:hover {
   box-shadow: var(--shadow);
+}
+
+.preview-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 10;
+  border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0;
+  transition: background-color var(--transition-fast);
+}
+
+.preview-resize-handle:hover,
+.preview-resize-handle.active {
+  background-color: rgba(99, 102, 241, 0.3);
 }
 
 @keyframes panelSlideRight {
@@ -699,12 +717,20 @@ body {
 }
 
 .selected-prompts {
-  max-height: 180px;
+  min-height: 60px;
+  max-height: 280px;
   overflow-y: auto;
   margin-bottom: 0.75rem;
   padding: 0.4rem;
   background-color: var(--light-bg);
   border-radius: var(--border-radius-sm);
+  resize: vertical;
+  border: 1px solid rgba(226, 232, 240, var(--border-alpha));
+  transition: border-color var(--transition-fast);
+}
+
+.selected-prompts:hover {
+  border-color: var(--primary-color);
 }
 
 .selected-prompts::-webkit-scrollbar {
@@ -777,13 +803,15 @@ body {
   color: #e2e8f0;
   padding: 0.85rem;
   border-radius: var(--border-radius-sm);
-  min-height: 80px;
+  min-height: 50px;
+  height: auto;
   font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 0.82rem;
   line-height: 1.6;
   border: 1px solid rgba(99, 102, 241, 0.15);
+  overflow: visible;
 }
 
 .preview-output .placeholder {
@@ -871,13 +899,15 @@ body {
   color: #e2e8f0;
   padding: 0.65rem;
   border-radius: var(--border-radius-sm);
-  min-height: 70px;
+  min-height: 50px;
+  height: auto;
   font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
   white-space: pre-wrap;
   word-break: break-word;
   margin-top: 0.6rem;
   font-size: 0.82rem;
   border: 1px solid rgba(99, 102, 241, 0.15);
+  overflow: visible;
 }
 
 .random-result .placeholder {
