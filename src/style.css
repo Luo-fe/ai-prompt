@@ -681,14 +681,15 @@ body {
 
 .preview-resize-handle {
   position: absolute;
-  right: 0;
+  right: -3px;
   top: 0;
   bottom: 0;
-  width: 6px;
+  width: 8px;
   cursor: ew-resize;
   z-index: 10;
   border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0;
   transition: background-color var(--transition-fast);
+  -webkit-app-region: no-drag;
 }
 
 .preview-resize-handle:hover,
@@ -717,8 +718,8 @@ body {
 }
 
 .selected-prompts {
-  min-height: 60px;
-  max-height: 280px;
+  min-height: 190px;
+  max-height: 400px;
   overflow-y: auto;
   margin-bottom: 0.75rem;
   padding: 0.4rem;
@@ -727,10 +728,34 @@ body {
   resize: vertical;
   border: 1px solid rgba(226, 232, 240, var(--border-alpha));
   transition: border-color var(--transition-fast);
+  flex-shrink: 0;
 }
 
 .selected-prompts:hover {
   border-color: var(--primary-color);
+}
+
+.selected-prompts:empty {
+  min-height: 60px;
+}
+
+.selected-prompts:has(.no-selected) {
+  min-height: 60px;
+}
+
+.selected-prompts::after {
+  content: '';
+  display: block;
+  height: 4px;
+  margin-top: 4px;
+  background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.selected-prompts:hover::after {
+  opacity: 1;
 }
 
 .selected-prompts::-webkit-scrollbar {
@@ -790,6 +815,7 @@ body {
 
 .preview-section {
   margin-bottom: 0.75rem;
+  flex-shrink: 0;
 }
 
 .preview-section h3 {
@@ -829,12 +855,17 @@ body {
 
 .export-section {
   margin-bottom: 1rem;
+  flex-shrink: 0;
 }
 
 .btn-large {
   width: 100%;
   padding: 0.65rem;
   font-size: 0.9rem;
+}
+
+.random-section {
+  flex-shrink: 0;
 }
 
 .random-section h3 {
