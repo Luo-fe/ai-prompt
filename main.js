@@ -24,7 +24,9 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
-  mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -32,22 +34,32 @@ function createWindow() {
   });
 }
 
-function handleMinimize() { if (mainWindow) mainWindow.minimize(); }
+ipcMain.on('window-minimize', () => {
+  if (mainWindow) mainWindow.minimize();
+});
 
-function handleMaximize() {
-  if (!mainWindow) return;
-  if (mainWindow.isMaximized()) mainWindow.unmaximize();
-  else mainWindow.maximize();
-}
+ipcMain.on('window-maximize', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  }
+});
 
-function handleClose() { if (mainWindow) mainWindow.close(); }
+ipcMain.on('window-close', () => {
+  if (mainWindow) mainWindow.close();
+});
 
 app.whenReady().then(createWindow);
 
-app.on('window-all-closed', () => app.quit());
+app.on('window-all-closed', () => {
+  app.quit();
+});
 
-app.on('activate', () => { if (!mainWindow) createWindow(); });
-
-ipcMain.on('window-minimize', handleMinimize);
-ipcMain.on('window-maximize', handleMaximize);
-ipcMain.on('window-close', handleClose);
+app.on('activate', () => {
+  if (mainWindow === null) {
+    createWindow();
+  }
+});
