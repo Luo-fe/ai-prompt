@@ -1,0 +1,71 @@
+{
+  "name": "luo-fe-prompt-manager",
+  "version": "1.2.0",
+  "description": "Luo-fe本地提示词管理器 - AI文生图提示词工具",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable",
+    "build:nsis": "electron-builder --win nsis",
+    "build:all": "electron-builder --win"
+  },
+  "author": "Luo-fe",
+  "productName": "Luo-fe的本地提示词管理器",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "sharp": "^0.34.5",
+    "to-ico": "^1.1.5"
+  },
+  "build": {
+    "appId": "com.luofe.prompt-manager",
+    "productName": "Luo-fe的本地提示词管理器",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "icon.ico",
+      "icon.png",
+      "README.md"
+    ],
+    "win": {
+      "icon": "icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "Luo-fe本地提示词管理器_v1.2_便携版.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Luo-fe的本地提示词管理器",
+      "artifactName": "Luo-fe本地提示词管理器_v1.2_安装版.exe"
+    },
+    "asar": true,
+    "asarUnpack": [],
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
+    }
+  }
+}

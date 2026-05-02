@@ -1,0 +1,7 @@
+node_modules/
+dist/
+应用程序/
+*.exe
+*.blockmap
+data/
+*.ps1
