@@ -681,20 +681,33 @@ body {
 
 .preview-resize-handle {
   position: absolute;
-  right: -3px;
+  right: -4px;
   top: 0;
   bottom: 0;
-  width: 8px;
+  width: 10px;
   cursor: ew-resize;
   z-index: 10;
-  border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0;
-  transition: background-color var(--transition-fast);
   -webkit-app-region: no-drag;
 }
 
-.preview-resize-handle:hover,
-.preview-resize-handle.active {
-  background-color: rgba(99, 102, 241, 0.3);
+.preview-resize-handle::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 32px;
+  border-radius: 2px;
+  background: var(--border-color);
+  opacity: 0;
+  transition: opacity var(--transition-fast), background-color var(--transition-fast);
+}
+
+.preview-resize-handle:hover::after,
+.preview-resize-handle.active::after {
+  opacity: 1;
+  background: var(--primary-color);
 }
 
 @keyframes panelSlideRight {
@@ -718,44 +731,47 @@ body {
 }
 
 .selected-prompts {
-  min-height: 190px;
-  max-height: 400px;
+  height: 190px;
+  min-height: 60px;
+  max-height: 500px;
   overflow-y: auto;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0;
   padding: 0.4rem;
   background-color: var(--light-bg);
   border-radius: var(--border-radius-sm);
-  resize: vertical;
   border: 1px solid rgba(226, 232, 240, var(--border-alpha));
   transition: border-color var(--transition-fast);
   flex-shrink: 0;
+  position: relative;
 }
 
 .selected-prompts:hover {
   border-color: var(--primary-color);
 }
 
-.selected-prompts:empty {
-  min-height: 60px;
+.selected-prompts-resize-handle {
+  height: 10px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.75rem;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
 }
 
-.selected-prompts:has(.no-selected) {
-  min-height: 60px;
-}
-
-.selected-prompts::after {
+.selected-prompts-resize-handle::after {
   content: '';
-  display: block;
-  height: 4px;
-  margin-top: 4px;
-  background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+  width: 32px;
+  height: 3px;
   border-radius: 2px;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
+  background: var(--border-color);
+  transition: background-color var(--transition-fast);
 }
 
-.selected-prompts:hover::after {
-  opacity: 1;
+.selected-prompts-resize-handle:hover::after,
+.selected-prompts-resize-handle.active::after {
+  background: var(--primary-color);
 }
 
 .selected-prompts::-webkit-scrollbar {

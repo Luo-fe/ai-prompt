@@ -1713,38 +1713,74 @@ function updateBgPreview() {
 }
 
 function initPreviewPanelResize() {
-  const handle = document.getElementById('preview-resize-handle');
+  const panelHandle = document.getElementById('preview-resize-handle');
   const panel = document.querySelector('.preview-panel');
-  if (!handle || !panel) return;
+  const promptsHandle = document.getElementById('selected-prompts-resize-handle');
+  const promptsBox = document.getElementById('selected-prompts');
 
-  let isResizing = false;
-  let startX = 0;
-  let startWidth = 0;
+  if (panelHandle && panel) {
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
 
-  handle.addEventListener('mousedown', e => {
-    isResizing = true;
-    startX = e.clientX;
-    startWidth = panel.offsetWidth;
-    handle.classList.add('active');
-    document.body.style.cursor = 'ew-resize';
-    document.body.style.userSelect = 'none';
-    e.preventDefault();
-  });
+    panelHandle.addEventListener('mousedown', e => {
+      isResizing = true;
+      startX = e.clientX;
+      startWidth = panel.offsetWidth;
+      panelHandle.classList.add('active');
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+      e.stopPropagation();
+    });
 
-  document.addEventListener('mousemove', e => {
-    if (!isResizing) return;
-    const diff = e.clientX - startX;
-    const newWidth = Math.min(Math.max(startWidth + diff, 240), 500);
-    panel.style.width = newWidth + 'px';
-  });
+    document.addEventListener('mousemove', e => {
+      if (!isResizing) return;
+      const diff = e.clientX - startX;
+      const newWidth = Math.min(Math.max(startWidth + diff, 240), 500);
+      panel.style.width = newWidth + 'px';
+    });
 
-  document.addEventListener('mouseup', () => {
-    if (!isResizing) return;
-    isResizing = false;
-    handle.classList.remove('active');
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-  });
+    document.addEventListener('mouseup', () => {
+      if (!isResizing) return;
+      isResizing = false;
+      panelHandle.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    });
+  }
+
+  if (promptsHandle && promptsBox) {
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    promptsHandle.addEventListener('mousedown', e => {
+      isResizing = true;
+      startY = e.clientY;
+      startHeight = promptsBox.offsetHeight;
+      promptsHandle.classList.add('active');
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!isResizing) return;
+      const diff = e.clientY - startY;
+      const newHeight = Math.min(Math.max(startHeight + diff, 60), 500);
+      promptsBox.style.height = newHeight + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!isResizing) return;
+      isResizing = false;
+      promptsHandle.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    });
+  }
 }
 
 document.addEventListener('DOMContentLoaded', initApp);
