@@ -1,0 +1,56 @@
+{
+  "name": "ai-prompt-tool",
+  "version": "1.0.0",
+  "description": "AI文生图提示词工具 - DreamN本地提示词管理系统",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable",
+    "build:nsis": "electron-builder --win nsis",
+    "build:all": "electron-builder --win"
+  },
+  "author": "AI Prompt Tool",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-packager": "^17.1.2"
+  },
+  "build": {
+    "appId": "com.aiprompt.tool",
+    "productName": "AI提示词工具",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "icon.ico"
+    ],
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "AI提示词工具.exe"
+    },
+    "extraResources": [
+      {
+        "from": "icon.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "src/**/*"
+    ]
+  }
+}
