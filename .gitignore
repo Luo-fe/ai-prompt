@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist2/
+dist3/
 应用程序/
 *.exe
 *.blockmap

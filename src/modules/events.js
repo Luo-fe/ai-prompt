@@ -18,6 +18,29 @@ export function bindEvents() {
     handlers.renderCustomCategoryList();
   });
 
+  if (elements.categoryBatchModeBtn) {
+    elements.categoryBatchModeBtn.addEventListener('click', () => {
+      if (handlers.toggleCategoryBatchMode) handlers.toggleCategoryBatchMode();
+    });
+  }
+
+  if (elements.categoryBatchCancelBtn) {
+    elements.categoryBatchCancelBtn.addEventListener('click', () => {
+      if (handlers.exitCategoryBatchMode) handlers.exitCategoryBatchMode();
+    });
+  }
+
+  if (elements.categoryBatchDeleteBtn) {
+    elements.categoryBatchDeleteBtn.addEventListener('click', () => {
+      if (handlers.categoryBatchDelete) {
+        const result = handlers.categoryBatchDelete();
+        if (result && typeof result.catch === 'function') {
+          result.catch(e => console.error('categoryBatchDelete error:', e));
+        }
+      }
+    });
+  }
+
   elements.saveCategoryBtn.addEventListener('click', () => {
     const name = elements.newCategoryName.value;
     if (name.trim()) {

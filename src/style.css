@@ -245,31 +245,23 @@ body {
   flex-shrink: 0;
 }
 
-#add-category-btn {
-  font-size: 0.75rem;
-  padding: 0.35rem 0.75rem;
-  background: var(--primary-gradient);
-  color: white;
-  border-radius: var(--border-radius-sm);
-  transition: var(--transition-fast);
+.category-header-actions {
   display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  border: none;
-  box-shadow: none;
-  align-self: flex-end;
-  margin-top: 0.25rem;
-  font-weight: 600;
+  gap: 0.35rem;
+  width: 100%;
 }
 
-#add-category-btn:hover {
-  background: var(--primary-gradient-hover);
-  box-shadow: var(--shadow-primary);
-  transform: translateY(-1px);
-}
-
-#add-category-btn:active {
-  transform: translateY(0) scale(0.97);
+.category-header-actions .btn {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.72rem;
+  padding: 0.3rem 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  justify-content: center;
+  min-height: 30px;
+  border-radius: var(--border-radius-sm);
 }
 
 .category-list {
@@ -1098,6 +1090,62 @@ body {
   background-color: rgba(255, 255, 255, 0.06);
   border-radius: 6px;
   font-size: 0.85rem;
+}
+
+.examples-section {
+  flex-shrink: 0;
+  margin-top: 1rem;
+}
+
+.examples-section h3 {
+  font-size: 0.88rem;
+  margin-bottom: 0.6rem;
+  font-weight: 600;
+}
+
+.example-item {
+  background-color: var(--light-bg);
+  border: 1px solid rgba(226, 232, 240, var(--border-alpha));
+  border-radius: var(--border-radius-sm);
+  padding: 0.65rem;
+  margin-bottom: 0.5rem;
+  transition: var(--transition-fast);
+}
+
+.example-item:hover {
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-xs);
+}
+
+.example-item h4 {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 0.3rem;
+}
+
+.example-item p {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 0.15rem;
+  line-height: 1.4;
+}
+
+.example-item .example-combination {
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.76rem;
+  color: var(--text-color);
+  background: rgba(99, 102, 241, 0.06);
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+
+.example-item .apply-example {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  min-height: 26px;
 }
 
 /* ================================
@@ -2000,6 +2048,12 @@ input:checked + .slider:before {
   background: var(--primary-light);
 }
 
+.search-result-item.search-result-keyboard-active {
+  background: var(--primary-light);
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
+}
+
 .search-result-item.search-result-selected {
   background: rgba(99, 102, 241, 0.08);
 }
@@ -2117,6 +2171,45 @@ input:checked + .slider:before {
   font-size: 0.72rem;
   padding: 0.2rem 0.5rem;
   min-height: 28px;
+}
+
+.category-batch-bar {
+  display: none;
+  background: var(--primary-light);
+  border: 1.5px solid var(--primary-color);
+  border-radius: var(--border-radius-sm);
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.5rem;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  animation: modalSlideIn 0.2s ease;
+}
+
+.category-batch-bar.active {
+  display: flex;
+}
+
+.category-batch-bar .batch-info {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-right: auto;
+}
+
+.category-batch-bar .btn {
+  font-size: 0.68rem;
+  padding: 0.15rem 0.4rem;
+  min-height: 26px;
+}
+
+.category-list-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-right: 0.5rem;
 }
 
 .batch-checkbox {

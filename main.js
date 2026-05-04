@@ -112,9 +112,22 @@ function createWindow() {
 
   const iconPath = resolveIconPath();
 
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+  const windowStatePath = path.join(dataDir, 'window-state.json');
+  let windowState = { width: 1200, height: 800, x: undefined, y: undefined, isMaximized: false };
+  try {
+    if (fs.existsSync(windowStatePath)) {
+      const saved = JSON.parse(fs.readFileSync(windowStatePath, 'utf-8'));
+      if (saved && typeof saved.width === 'number' && typeof saved.height === 'number') {
+        windowState = saved;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load window state:', e.message);
+  }
+
+  const createOptions = {
+    width: windowState.width,
+    height: windowState.height,
     minWidth: 900,
     minHeight: 600,
     title: 'Luo-fe的本地提示词管理器 v1.2',
@@ -130,7 +143,18 @@ function createWindow() {
       sandbox: true,
       backgroundThrottling: true
     }
-  });
+  };
+
+  if (typeof windowState.x === 'number' && typeof windowState.y === 'number') {
+    createOptions.x = windowState.x;
+    createOptions.y = windowState.y;
+  }
+
+  mainWindow = new BrowserWindow(createOptions);
+
+  if (windowState.isMaximized) {
+    mainWindow.maximize();
+  }
 
   if (process.platform === 'win32' && iconPath) {
     try {
@@ -166,6 +190,19 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+
+  mainWindow.on('close', () => {
+    try {
+      const dataDir = getAppDataDir();
+      const windowStatePath = path.join(dataDir, 'window-state.json');
+      const bounds = mainWindow.getBounds();
+      const isMaximized = mainWindow.isMaximized();
+      const state = { ...bounds, isMaximized };
+      fs.writeFileSync(windowStatePath, JSON.stringify(state), 'utf-8');
+    } catch (e) {
+      console.warn('Failed to save window state:', e.message);
+    }
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -254,8 +291,8 @@ ipcMain.handle('cache-read', async (event, key) => {
     if (!fs.existsSync(filePath)) return { success: false };
     const raw = fs.readFileSync(filePath, 'utf-8');
     const cached = JSON.parse(raw);
-    if (cached.hash && cached.data) {
-      const currentHash = computeHash(JSON.stringify(cached.data));
+    if (cached.hash && cached.rawJson) {
+      const currentHash = computeHash(cached.rawJson);
       if (currentHash !== cached.hash) {
         fs.unlinkSync(filePath);
         return { success: false, error: 'Integrity check failed' };
@@ -271,10 +308,12 @@ ipcMain.handle('cache-write', async (event, key, data) => {
   try {
     const cacheDir = getCacheDir();
     const filePath = path.join(cacheDir, `${key}.json`);
-    const hash = computeHash(JSON.stringify(data));
+    const rawJson = JSON.stringify(data);
+    const hash = computeHash(rawJson);
     const cached = {
       key,
       data,
+      rawJson,
       hash,
       timestamp: Date.now(),
       version: 1

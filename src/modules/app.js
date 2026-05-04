@@ -2,11 +2,11 @@ import { appState, loadData, loadDataFromCache, saveData, saveDataImmediate, loa
 import { DEFAULT_CATEGORIES, EXAMPLES } from './constants.js';
 import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, findPromptIndex, debounce } from './utils.js';
 import { addCategory, addCategories, editCategory, deleteCategory, batchDeleteCategories, moveCategoryUp, moveCategoryDown, addPrompt, editPrompt, deletePrompt, batchImportPrompts, togglePrompt, selectAllPrompts, deselectAllPrompts, clearAllSelectedPrompts, isPromptSelected, isPromptSelectedByText, updatePromptTranslation, syncSelectedPromptsTranslations, exportAllData, exportCsv, handleFileImport, handleCsvImport, cleanDuplicatePrompts, setDialogHandlers as setDataDialogHandlers } from './data.js';
-import { translateText, translateAllPrompts, setTranslateHandlers, getFallbackTranslation } from './translate.js';
+import { translateText, translateAllPrompts, setTranslateHandlers, setTranslateAllProgressCallback, getFallbackTranslation } from './translate.js';
 import { initSearch, initSearchEvents, handleSearch } from './search.js';
 import { initBatch, toggleBatchMode, exitBatchMode, updateBatchInfo, batchDeletePrompts, batchMovePrompts, performBatchMove, batchEditPrompts, initBatchEvents } from './batch.js';
 import { initSettings, openSettingsModal, saveSettings, handleBgImageUpload, clearBgImage, loadBgImageFromFile, updateBgPreview, applyBackgroundSettings, toggleBgClarityMode, applyBgClarityMode, bindSettingsEvents } from './settings.js';
-import { initRender, cacheElements, elements, renderCategoryList, renderCustomCategoryList, renderPromptList, renderFrequentPrompts, renderSelectedPrompts, renderPreview, renderRandomCategorySelector, renderExamples, showNotification, showConfirmDialog, showInputDialog, renderCategoryPromptsList } from './render.js';
+import { initRender, cacheElements, elements, renderCategoryList, renderCustomCategoryList, renderPromptList, renderFrequentPrompts, renderSelectedPrompts, renderPreview, renderRandomCategorySelector, renderExamples, showNotification, showConfirmDialog, showInputDialog, renderCategoryPromptsList, toggleCategoryBatchMode, exitCategoryBatchMode, categoryBatchDelete } from './render.js';
 import { initEvents, bindEvents, bindSettingsEvents as bindSettingsEventsFromEvents, initSearchEvents as bindSearchEvents, initBatchEvents as bindBatchEvents, initSortEvents, initPreviewPanelResize } from './events.js';
 
 function selectCategory(categoryId) {
@@ -103,6 +103,11 @@ function openExportModal() {
     showNotification('请先选择提示词', 'warning');
     return;
   }
+  const delimiterOption = document.getElementById('delimiter-option');
+  const checkedFormat = document.querySelector('input[name="export-format"]:checked');
+  if (delimiterOption && checkedFormat) {
+    delimiterOption.style.display = checkedFormat.value === 'text' ? 'block' : 'none';
+  }
   updateExportPreview();
   elements.exportModal.style.display = 'block';
 }
@@ -164,6 +169,15 @@ function generateMarkdownOutput() {
 function copyToClipboard() {
   const text = elements.exportPreview.value;
   if (!text) { showNotification('没有可复制的内容', 'warning'); return; }
+
+  Object.keys(appState.selectedPrompts).forEach(categoryId => {
+    appState.selectedPrompts[categoryId].forEach(p => {
+      recordPromptUsage(categoryId, getPromptText(p));
+    });
+  });
+
+  if (appState.selectedCategoryId) renderPromptList(appState.selectedCategoryId);
+
   navigator.clipboard.writeText(text)
     .then(() => showNotification('已复制到剪贴板'))
     .catch(() => showNotification('复制失败，请手动复制', 'error'));
@@ -172,6 +186,15 @@ function copyToClipboard() {
 function downloadFile() {
   const text = elements.exportPreview.value;
   if (!text) { showNotification('没有可下载的内容', 'warning'); return; }
+
+  Object.keys(appState.selectedPrompts).forEach(categoryId => {
+    appState.selectedPrompts[categoryId].forEach(p => {
+      recordPromptUsage(categoryId, getPromptText(p));
+    });
+  });
+
+  if (appState.selectedCategoryId) renderPromptList(appState.selectedCategoryId);
+
   const format = document.querySelector('input[name="export-format"]:checked').value;
   let filename = 'ai-prompt-combination', mimeType = 'text/plain';
   if (format === 'json') { filename += '.json'; mimeType = 'application/json'; }
@@ -288,9 +311,15 @@ async function initApp() {
     renderRandomCategorySelector, renderCustomCategoryList });
   setTranslateHandlers({ syncSelectedPromptsTranslations, saveData, showNotification });
 
+  setTranslateAllProgressCallback((total, failed, skipped, totalTasks) => {
+    if (totalTasks <= 0) return;
+    const percent = Math.round(((total + failed) / totalTasks) * 100);
+    showNotification(`翻译进度: ${percent}% (${total + failed}/${totalTasks})`, 'info');
+  });
+
   initRender({
     togglePrompt, isPromptSelected, recordPromptUsage, selectCategory,
-    editCategory, deleteCategory, moveCategoryUp, moveCategoryDown,
+    editCategory, deleteCategory, batchDeleteCategories, moveCategoryUp, moveCategoryDown,
     openPromptModal, addPrompt, editPrompt,
     deletePrompt, batchImportPrompts, saveData, translateText,
     updatePromptTranslation, renderPromptList, renderSelectedPrompts,
@@ -310,7 +339,8 @@ async function initApp() {
 
   initSettings({
     showNotification, applyBackgroundSettings, applyBgClarityMode,
-    renderPromptList, renderSelectedPrompts, saveData,
+    renderPromptList, renderSelectedPrompts, renderCategoryList,
+    renderRandomCategorySelector, saveData,
     showConfirm: showConfirmDialog, savePromptUsage,
     getElements: () => elements
   });
@@ -324,7 +354,8 @@ async function initApp() {
     copyToClipboard, downloadFile, closeModal, openSettingsModal: () => openSettingsModal(elements),
     translateAllPrompts, showNotification, renderCustomCategoryList,
     sortPrompts, selectCategory, renderCategoryList, renderPromptList: () => renderPromptList(appState.selectedCategoryId),
-    renderSelectedPrompts, renderPreview, saveData
+    renderSelectedPrompts, renderPreview, saveData,
+    toggleCategoryBatchMode, exitCategoryBatchMode, categoryBatchDelete
   });
 
   renderCategoryList();

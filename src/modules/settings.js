@@ -1,12 +1,15 @@
 import { appState, saveSettingsToStorage, savePromptUsage } from './state.js';
 import { BG_IMAGE_MAX_SIZE } from './constants.js';
 import { getCacheInfo, clearAllCache, isCacheAvailable } from './cache.js';
+import { parseCsvLine } from './utils.js';
 
 let _showNotification = () => {};
 let _applyBackgroundSettings = () => {};
 let _applyBgClarityMode = () => {};
 let _renderPromptList = () => {};
 let _renderSelectedPrompts = () => {};
+let _renderCategoryList = () => {};
+let _renderRandomCategorySelector = () => {};
 let _saveData = () => {};
 let _getElements = () => ({});
 let _showConfirm = async () => false;
@@ -18,6 +21,8 @@ export function initSettings(handlers) {
   _applyBgClarityMode = handlers.applyBgClarityMode || _applyBgClarityMode;
   _renderPromptList = handlers.renderPromptList || _renderPromptList;
   _renderSelectedPrompts = handlers.renderSelectedPrompts || _renderSelectedPrompts;
+  _renderCategoryList = handlers.renderCategoryList || _renderCategoryList;
+  _renderRandomCategorySelector = handlers.renderRandomCategorySelector || _renderRandomCategorySelector;
   _saveData = handlers.saveData || _saveData;
   _showConfirm = handlers.showConfirm || _showConfirm;
   _savePromptUsage = handlers.savePromptUsage || _savePromptUsage;
@@ -141,9 +146,18 @@ export function updateBgPreview(elements) {
   const container = elements.bgPreviewContainer;
   if (!container) return;
   const bgImage = appState.bgImageData || (appState.settings.backgroundImage !== 'file://stored' ? appState.settings.backgroundImage : '');
-  container.innerHTML = bgImage
-    ? `<img src="${bgImage}" alt="背景预览">`
-    : '<span class="bg-preview-placeholder">未设置背景图片</span>';
+  container.innerHTML = '';
+  if (bgImage) {
+    const img = document.createElement('img');
+    img.src = bgImage;
+    img.alt = '背景预览';
+    container.appendChild(img);
+  } else {
+    const span = document.createElement('span');
+    span.className = 'bg-preview-placeholder';
+    span.textContent = '未设置背景图片';
+    container.appendChild(span);
+  }
 }
 
 export function applyBackgroundSettings(elements) {
@@ -220,6 +234,10 @@ export function bindSettingsEvents(elements) {
       categories: appState.categories,
       settings: appState.settings,
       translations: appState.translations,
+      promptUsage: appState.promptUsage,
+      selectedPrompts: appState.selectedPrompts,
+      nextCategoryId: appState.nextCategoryId,
+      bgImageData: appState.bgImageData || null,
       exportDate: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -245,32 +263,46 @@ export function bindSettingsEvents(elements) {
           _showNotification('无效的导入文件格式', 'error');
           return;
         }
-        const replace = await _showConfirm('导入数据', '是否替换现有数据？选择"取消"将合并数据。', 'question');
-        if (replace) {
-          appState.categories = data.categories;
-          if (data.settings) Object.assign(appState.settings, data.settings);
-          if (data.translations) Object.assign(appState.translations, data.translations);
-          if (data.nextCategoryId) appState.nextCategoryId = data.nextCategoryId;
-        } else {
-          for (const cat of data.categories) {
-            const existing = appState.categories.find(c => c.id === cat.id);
-            if (existing) {
-              for (const prompt of cat.prompts) {
-                const text = typeof prompt === 'object' && prompt !== null ? prompt.text : String(prompt);
-                if (!existing.prompts.some(p => (typeof p === 'object' && p !== null ? p.text : String(p)) === text)) {
-                  existing.prompts.push(prompt);
-                }
+
+        let addedCategories = 0;
+        let addedPrompts = 0;
+
+        for (const cat of data.categories) {
+          const existing = appState.categories.find(c => c.id === cat.id || c.name === cat.name);
+          if (existing) {
+            const existingTexts = new Set(existing.prompts.map(p => (typeof p === 'object' && p !== null ? p.text : String(p)).toLowerCase()));
+            for (const prompt of cat.prompts) {
+              const text = typeof prompt === 'object' && prompt !== null ? prompt.text : String(prompt);
+              if (!existingTexts.has(text.toLowerCase())) {
+                existing.prompts.push(prompt);
+                existingTexts.add(text.toLowerCase());
+                addedPrompts++;
               }
-            } else {
-              appState.categories.push(cat);
             }
+          } else {
+            appState.categories.push(cat);
+            addedCategories++;
           }
-          if (data.settings) Object.assign(appState.settings, data.settings);
-          if (data.translations) Object.assign(appState.translations, data.translations);
         }
+
+        if (data.settings) Object.assign(appState.settings, data.settings);
+        if (data.translations) Object.assign(appState.translations, data.translations);
+        if (data.promptUsage) Object.assign(appState.promptUsage, data.promptUsage);
+        if (data.nextCategoryId && data.nextCategoryId > appState.nextCategoryId) {
+          appState.nextCategoryId = data.nextCategoryId;
+        }
+        if (data.bgImageData) appState.bgImageData = data.bgImageData;
+
         _saveData();
         saveSettingsToStorage();
-        _showNotification('数据导入成功', 'success');
+        appState.selectedCategoryId = appState.selectedCategoryId || (appState.categories.length > 0 ? appState.categories[0].id : null);
+        const els = _getElements();
+        _renderCategoryList();
+        _renderRandomCategorySelector();
+        _applyBackgroundSettings(els);
+        if (appState.selectedCategoryId) _renderPromptList(appState.selectedCategoryId);
+        _renderSelectedPrompts();
+        _showNotification(`数据合并成功：新增 ${addedCategories} 个分类，${addedPrompts} 个提示词`, 'success');
       } catch (error) {
         _showNotification('导入文件解析失败', 'error');
       }
@@ -448,36 +480,4 @@ async function refreshCacheInfo() {
     div.appendChild(valueSpan);
     cacheInfoEl.appendChild(div);
   });
-}
-
-function parseCsvLine(line) {
-  const result = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (i + 1 < line.length && line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        current += ch;
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true;
-      } else if (ch === ',') {
-        result.push(current);
-        current = '';
-      } else {
-        current += ch;
-      }
-    }
-  }
-  result.push(current);
-  return result;
 }

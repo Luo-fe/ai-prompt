@@ -4,6 +4,11 @@ import { FALLBACK_TRANSLATIONS, API_TIMEOUT, BATCH_TRANSLATE_INTERVAL, DEFAULT_C
 let _syncSelectedPromptsTranslations = () => {};
 let _saveData = () => {};
 let _showNotification = () => {};
+let _translateAllProgressCallback = null;
+
+export function setTranslateAllProgressCallback(cb) {
+  _translateAllProgressCallback = cb;
+}
 
 export function getFallbackTranslation(text) {
   const lower = text.toLowerCase();
@@ -159,6 +164,11 @@ export async function translateAllPrompts() {
   const batchSize = 5;
   let failed = 0;
   let total = tasks.filter(t => t.status === 'resolved').length;
+  const totalTasks = tasks.length;
+
+  if (_translateAllProgressCallback) {
+    _translateAllProgressCallback(total, failed, skipped, totalTasks);
+  }
 
   for (let i = 0; i < pendingTasks.length; i += batchSize) {
     const batch = pendingTasks.slice(i, i + batchSize);
@@ -173,6 +183,10 @@ export async function translateAllPrompts() {
       } else {
         failed++;
       }
+    }
+
+    if (_translateAllProgressCallback) {
+      _translateAllProgressCallback(total, failed, skipped, totalTasks);
     }
 
     if (i + batchSize < pendingTasks.length) {

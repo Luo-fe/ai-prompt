@@ -16,11 +16,13 @@
     "electron": "^33.0.0",
     "electron-builder": "^25.1.8",
     "sharp": "^0.34.5",
-    "to-ico": "^1.1.5"
+    "to-ico": "^1.1.5",
+    "rcedit": "^5.0.2"
   },
   "build": {
     "appId": "com.luofe.prompt-manager",
     "productName": "Luo-fe的本地提示词管理器",
+    "afterPack": "./afterPack.js",
     "directories": {
       "output": "dist"
     },
@@ -28,10 +30,11 @@
       "main.js",
       "preload.js",
       "src/**/*",
+      "!src/splash.html",
       "icon.ico",
-      "icon.png",
-      "README.md"
+      "icon.png"
     ],
+    "extraResources": [],
     "win": {
       "icon": "icon.ico",
       "signAndEditExecutable": false,
@@ -60,7 +63,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Luo-fe的本地提示词管理器",
-      "artifactName": "Luo-fe本地提示词管理器_v1.2_安装版.exe"
+      "artifactName": "Luo-fe本地提示词管理器_v1.2_安装版.exe",
+      "include": "installer.nsh",
+      "deleteAppDataOnUninstall": false
     },
     "asar": true,
     "asarUnpack": [],

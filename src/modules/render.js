@@ -1,4 +1,4 @@
-import { appState } from './state.js';
+import { appState, saveDataImmediate } from './state.js';
 import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, findPromptIndex, createPromptKey } from './utils.js';
 import { EXAMPLES, NOTIFICATION_DURATION, NOTIFICATION_MAX_COUNT } from './constants.js';
 
@@ -10,6 +10,9 @@ export function initRender(h) {
 
 const elements = {};
 export { elements };
+
+let _categoryBatchMode = false;
+let _categoryBatchSelected = new Set();
 
 export function cacheElements() {
   elements.categoryList = document.getElementById('category-list');
@@ -100,6 +103,11 @@ export function cacheElements() {
   elements.exportCsvBtn = document.getElementById('export-csv-btn');
   elements.importCsvBtn = document.getElementById('import-csv-btn');
   elements.importCsvFileInput = document.getElementById('import-csv-file-input');
+  elements.categoryBatchModeBtn = document.getElementById('category-batch-mode-btn');
+  elements.categoryBatchBar = document.getElementById('category-batch-bar');
+  elements.categoryBatchInfo = document.getElementById('category-batch-info');
+  elements.categoryBatchDeleteBtn = document.getElementById('category-batch-delete-btn');
+  elements.categoryBatchCancelBtn = document.getElementById('category-batch-cancel-btn');
 }
 
 export function renderCategoryList() {
@@ -110,26 +118,41 @@ export function renderCategoryList() {
     item.className = `category-item ${appState.selectedCategoryId === category.id ? 'active' : ''}`;
     item.dataset.categoryId = category.id;
 
+    if (_categoryBatchMode) {
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'category-list-checkbox';
+      cb.checked = _categoryBatchSelected.has(category.id);
+      cb.addEventListener('change', () => {
+        if (cb.checked) _categoryBatchSelected.add(category.id);
+        else _categoryBatchSelected.delete(category.id);
+        _updateCategoryBatchInfo();
+      });
+      item.appendChild(cb);
+    }
+
     const leftSection = document.createElement('div');
     leftSection.className = 'category-item-left';
 
-    const sortBtns = document.createElement('div');
-    sortBtns.className = 'category-sort-btns';
-    const upBtn = document.createElement('button');
-    upBtn.className = 'category-sort-btn';
-    upBtn.innerHTML = '<i class="fa fa-chevron-up"></i>';
-    upBtn.title = '上移';
-    upBtn.disabled = index === 0;
-    upBtn.addEventListener('click', e => { e.stopPropagation(); handlers.moveCategoryUp(category.id); });
-    const downBtn = document.createElement('button');
-    downBtn.className = 'category-sort-btn';
-    downBtn.innerHTML = '<i class="fa fa-chevron-down"></i>';
-    downBtn.title = '下移';
-    downBtn.disabled = index === appState.categories.length - 1;
-    downBtn.addEventListener('click', e => { e.stopPropagation(); handlers.moveCategoryDown(category.id); });
-    sortBtns.appendChild(upBtn);
-    sortBtns.appendChild(downBtn);
-    leftSection.appendChild(sortBtns);
+    if (!_categoryBatchMode) {
+      const sortBtns = document.createElement('div');
+      sortBtns.className = 'category-sort-btns';
+      const upBtn = document.createElement('button');
+      upBtn.className = 'category-sort-btn';
+      upBtn.innerHTML = '<i class="fa fa-chevron-up"></i>';
+      upBtn.title = '上移';
+      upBtn.disabled = index === 0;
+      upBtn.addEventListener('click', e => { e.stopPropagation(); handlers.moveCategoryUp(category.id); });
+      const downBtn = document.createElement('button');
+      downBtn.className = 'category-sort-btn';
+      downBtn.innerHTML = '<i class="fa fa-chevron-down"></i>';
+      downBtn.title = '下移';
+      downBtn.disabled = index === appState.categories.length - 1;
+      downBtn.addEventListener('click', e => { e.stopPropagation(); handlers.moveCategoryDown(category.id); });
+      sortBtns.appendChild(upBtn);
+      sortBtns.appendChild(downBtn);
+      leftSection.appendChild(sortBtns);
+    }
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'category-name';
@@ -140,30 +163,35 @@ export function renderCategoryList() {
     const actions = document.createElement('div');
     actions.className = 'category-actions';
 
-    if (!category.isDefault) {
-      const editBtn = document.createElement('button');
-      editBtn.className = 'category-action-btn';
-      editBtn.innerHTML = '<i class="fa fa-pencil"></i>';
-      editBtn.title = '编辑分类';
-      editBtn.addEventListener('click', e => { e.stopPropagation(); handlers.editCategory(category.id); });
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'category-action-btn';
-      deleteBtn.innerHTML = '<i class="fa fa-trash"></i>';
-      deleteBtn.title = '删除分类';
-      deleteBtn.addEventListener('click', e => { e.stopPropagation(); handlers.deleteCategory(category.id); });
-      actions.appendChild(editBtn);
-      actions.appendChild(deleteBtn);
-    } else {
-      const editBtn = document.createElement('button');
-      editBtn.className = 'category-action-btn';
-      editBtn.innerHTML = '<i class="fa fa-pencil"></i>';
-      editBtn.title = '编辑提示词';
-      editBtn.addEventListener('click', e => { e.stopPropagation(); handlers.openPromptModal(category.id); });
-      actions.appendChild(editBtn);
+    if (!_categoryBatchMode) {
+      if (!category.isDefault) {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'category-action-btn';
+        editBtn.innerHTML = '<i class="fa fa-pencil"></i>';
+        editBtn.title = '编辑分类';
+        editBtn.addEventListener('click', e => { e.stopPropagation(); handlers.editCategory(category.id); });
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'category-action-btn';
+        deleteBtn.innerHTML = '<i class="fa fa-trash"></i>';
+        deleteBtn.title = '删除分类';
+        deleteBtn.addEventListener('click', e => { e.stopPropagation(); handlers.deleteCategory(category.id); });
+        actions.appendChild(editBtn);
+        actions.appendChild(deleteBtn);
+      } else {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'category-action-btn';
+        editBtn.innerHTML = '<i class="fa fa-pencil"></i>';
+        editBtn.title = '编辑提示词';
+        editBtn.addEventListener('click', e => { e.stopPropagation(); handlers.openPromptModal(category.id); });
+        actions.appendChild(editBtn);
+      }
     }
 
     item.appendChild(actions);
-    item.addEventListener('click', () => handlers.selectCategory(category.id));
+    item.addEventListener('click', () => {
+      if (_categoryBatchMode) return;
+      handlers.selectCategory(category.id);
+    });
     frag.appendChild(item);
   });
   elements.categoryList.appendChild(frag);
@@ -214,11 +242,7 @@ export function renderCustomCategoryList() {
 
 function handlePromptToggle(categoryId, prompt, item, cb) {
   handlers.togglePrompt(categoryId, prompt);
-  const isSelected = handlers.isPromptSelected(categoryId, prompt);
-  item.classList.toggle('selected', isSelected);
-  item.classList.add('pulse');
-  setTimeout(() => item.classList.remove('pulse'), 300);
-  if (isSelected) handlers.recordPromptUsage(categoryId, getPromptText(prompt));
+  renderPromptList(categoryId);
 }
 
 export function renderPromptList(categoryId) {
@@ -227,13 +251,13 @@ export function renderPromptList(categoryId) {
   if (!category) {
     elements.currentCategoryTitle.textContent = '请选择分类';
     elements.promptList.innerHTML = '<div class="no-prompts">请从左侧选择一个分类</div>';
-    elements.frequentSection.style.display = 'none';
+    elements.frequentSection.classList.add('hidden');
     return;
   }
   elements.currentCategoryTitle.textContent = category.name;
   if (category.prompts.length === 0) {
     elements.promptList.innerHTML = '<div class="no-prompts">此分类下暂无提示词</div>';
-    elements.frequentSection.style.display = 'none';
+    elements.frequentSection.classList.add('hidden');
     return;
   }
 
@@ -291,10 +315,10 @@ export function renderPromptList(categoryId) {
 export function renderFrequentPrompts(categoryId) {
   const frequent = handlers.getFrequentPrompts ? handlers.getFrequentPrompts(categoryId, appState.settings.frequentCount || 10) : [];
   if (frequent.length === 0) {
-    elements.frequentSection.style.display = 'none';
+    elements.frequentSection.classList.add('hidden');
     return;
   }
-  elements.frequentSection.style.display = '';
+  elements.frequentSection.classList.remove('hidden');
   elements.frequentList.innerHTML = '';
   const frag = document.createDocumentFragment();
   frequent.forEach(item => {
@@ -314,8 +338,7 @@ export function renderFrequentPrompts(categoryId) {
       const prompt = findPromptInCategory(category, item.text);
       if (prompt) {
         handlers.togglePrompt(categoryId, prompt);
-        if (handlers.isPromptSelected(categoryId, prompt)) handlers.recordPromptUsage(categoryId, item.text);
-        handlers.renderPromptList(categoryId);
+        renderPromptList(categoryId);
       }
     });
     frag.appendChild(el);
@@ -481,6 +504,10 @@ export function renderPreview() {
 
 export function renderRandomCategorySelector() {
   if (!elements.randomCategorySelector) return;
+  const existingChecked = new Set();
+  elements.randomCategorySelector.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+    existingChecked.add(cb.value);
+  });
   const frag = document.createDocumentFragment();
   appState.categories.forEach(category => {
     const item = document.createElement('div');
@@ -490,6 +517,7 @@ export function renderRandomCategorySelector() {
     cb.id = `random-cat-${category.id}`;
     cb.value = category.id;
     cb.className = 'random-category-checkbox';
+    if (existingChecked.has(category.id)) cb.checked = true;
     const label = document.createElement('label');
     label.htmlFor = `random-cat-${category.id}`;
     label.textContent = category.name;
@@ -572,12 +600,24 @@ export function showNotification(message, type = 'success') {
   notification.appendChild(content);
   notification.appendChild(progress);
 
-  Object.assign(notification.style, { position: 'fixed', top: '16px', right: '16px', zIndex: '10000' });
+  const currentNotifications = document.querySelectorAll('.notification');
+  const offset = 16 + currentNotifications.length * 56;
+  Object.assign(notification.style, { position: 'fixed', top: offset + 'px', right: '16px', zIndex: '10000' });
   document.body.appendChild(notification);
   setTimeout(() => {
     notification.classList.add('hiding');
-    setTimeout(() => { if (notification.parentNode) document.body.removeChild(notification); }, 300);
+    setTimeout(() => {
+      if (notification.parentNode) document.body.removeChild(notification);
+      repositionNotifications();
+    }, 300);
   }, NOTIFICATION_DURATION);
+}
+
+function repositionNotifications() {
+  const notifications = document.querySelectorAll('.notification');
+  notifications.forEach((n, i) => {
+    n.style.top = (16 + i * 56) + 'px';
+  });
 }
 
 export function showConfirmDialog(title, message, icon, onConfirm) {
@@ -739,3 +779,66 @@ export function renderCategoryPromptsList(categoryId) {
 function updateBatchInfo() {
   if (elements.batchInfo) elements.batchInfo.textContent = `已选择 ${appState.batchSelected.size} 项`;
 }
+
+function _updateCategoryBatchInfo() {
+  if (elements.categoryBatchInfo) {
+    elements.categoryBatchInfo.textContent = `已选择 ${_categoryBatchSelected.size} 项`;
+  }
+}
+
+export function toggleCategoryBatchMode() {
+  _categoryBatchMode = !_categoryBatchMode;
+  if (_categoryBatchMode) {
+    _categoryBatchSelected = new Set();
+    if (elements.categoryBatchBar) elements.categoryBatchBar.classList.add('active');
+  } else {
+    _categoryBatchSelected = new Set();
+    if (elements.categoryBatchBar) elements.categoryBatchBar.classList.remove('active');
+  }
+  renderCategoryList();
+  _updateCategoryBatchInfo();
+}
+
+export function exitCategoryBatchMode() {
+  _categoryBatchMode = false;
+  _categoryBatchSelected = new Set();
+  if (elements.categoryBatchBar) elements.categoryBatchBar.classList.remove('active');
+  renderCategoryList();
+}
+
+export async function categoryBatchDelete() {
+  if (_categoryBatchSelected.size === 0) {
+    showNotification('请先勾选要删除的分类', 'warning');
+    return;
+  }
+  const ids = [..._categoryBatchSelected];
+  let confirmed = false;
+  try {
+    confirmed = await showConfirmDialog('批量删除分类', `确定要删除选中的 ${ids.length} 个分类及其所有提示词吗？`, '⚠️');
+  } catch (e) {
+    console.error('categoryBatchDelete confirm error:', e);
+    return;
+  }
+  if (!confirmed) return;
+
+  for (const id of ids) {
+    delete appState.selectedPrompts[id];
+  }
+  appState.categories = appState.categories.filter(cat => !ids.includes(cat.id));
+  if (ids.includes(appState.selectedCategoryId)) {
+    appState.selectedCategoryId = appState.categories.length > 0 ? appState.categories[0].id : null;
+  }
+
+  saveDataImmediate();
+
+  exitCategoryBatchMode();
+  renderCategoryList();
+  renderRandomCategorySelector();
+  renderCustomCategoryList();
+  if (appState.selectedCategoryId) renderPromptList(appState.selectedCategoryId);
+  renderSelectedPrompts();
+  renderPreview();
+  showNotification(`已删除 ${ids.length} 个分类`, 'success');
+}
+
+export { _categoryBatchMode };

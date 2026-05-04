@@ -1,5 +1,5 @@
 import { appState, saveData, saveDataImmediate, saveSettingsToStorage, saveTranslations, recordPromptUsage } from './state.js';
-import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, findPromptIndex, downloadBlob, iterateBatchSelected, createPromptKey } from './utils.js';
+import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, findPromptIndex, downloadBlob, iterateBatchSelected, createPromptKey, parseCsvLine } from './utils.js';
 
 let _translateText = async () => '';
 let _showConfirm = async () => false;
@@ -167,7 +167,6 @@ export async function addPrompt(categoryId, promptText) {
     _showNotification('提示词已存在', 'warning');
     return;
   }
-  appState.addingPrompt = true;
   let translation = '';
   const cached = appState.translations[trimmed];
   if (cached) {
@@ -182,7 +181,6 @@ export async function addPrompt(categoryId, promptText) {
   }
   category.prompts.push({ text: trimmed, translation });
   saveData();
-  appState.addingPrompt = false;
   _showNotification(`已添加提示词: ${trimmed}`, 'success');
   _renderCategoryPromptsList(categoryId);
   if (appState.selectedCategoryId === categoryId) _renderPromptList(categoryId);
@@ -288,7 +286,6 @@ export function togglePrompt(categoryId, prompt) {
     selectedArr.splice(idx, 1);
   }
   saveData();
-  if (appState.selectedCategoryId === categoryId) _renderPromptList(categoryId);
   _renderSelectedPrompts();
   _renderPreview();
 }
@@ -377,6 +374,10 @@ export function exportAllData() {
     categories: appState.categories,
     settings: appState.settings,
     translations: appState.translations,
+    promptUsage: appState.promptUsage,
+    selectedPrompts: appState.selectedPrompts,
+    nextCategoryId: appState.nextCategoryId,
+    bgImageData: appState.bgImageData || null,
     exportDate: new Date().toISOString()
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -409,39 +410,47 @@ export async function handleFileImport(event) {
         _showNotification('无效的导入文件格式', 'error');
         return;
       }
-      const replace = await _showConfirm('导入数据', '是否替换现有数据？选择"取消"将合并数据。', 'question');
-      if (replace) {
-        appState.categories = data.categories;
-        if (data.settings) Object.assign(appState.settings, data.settings);
-        if (data.translations) Object.assign(appState.translations, data.translations);
-        if (data.nextCategoryId) appState.nextCategoryId = data.nextCategoryId;
-      } else {
-        for (const cat of data.categories) {
-          const existing = getCategoryById(appState.categories, cat.id);
-          if (existing) {
-            for (const prompt of cat.prompts) {
-              const text = getPromptText(prompt);
-              if (!findPromptInCategory(existing, text)) {
-                existing.prompts.push(prompt);
-              }
+
+      let addedCategories = 0;
+      let addedPrompts = 0;
+
+      for (const cat of data.categories) {
+        const existing = appState.categories.find(c => c.id === cat.id || c.name === cat.name);
+        if (existing) {
+          const existingTexts = new Set(existing.prompts.map(p => getPromptText(p).toLowerCase()));
+          for (const prompt of cat.prompts) {
+            const text = getPromptText(prompt);
+            if (!existingTexts.has(text.toLowerCase())) {
+              existing.prompts.push(prompt);
+              existingTexts.add(text.toLowerCase());
+              addedPrompts++;
             }
-          } else {
-            appState.categories.push(cat);
           }
+        } else {
+          appState.categories.push(cat);
+          addedCategories++;
         }
-        if (data.settings) Object.assign(appState.settings, data.settings);
-        if (data.translations) Object.assign(appState.translations, data.translations);
       }
-      saveData();
+
+      if (data.settings) Object.assign(appState.settings, data.settings);
+      if (data.translations) Object.assign(appState.translations, data.translations);
+      if (data.promptUsage) Object.assign(appState.promptUsage, data.promptUsage);
+      if (data.nextCategoryId && data.nextCategoryId > appState.nextCategoryId) {
+        appState.nextCategoryId = data.nextCategoryId;
+      }
+      if (data.bgImageData) appState.bgImageData = data.bgImageData;
+
+      saveDataImmediate();
       saveSettingsToStorage();
       saveTranslations();
+      appState.selectedCategoryId = appState.selectedCategoryId || (appState.categories.length > 0 ? appState.categories[0].id : null);
       _renderCategoryList();
       _renderRandomCategorySelector();
       _renderCustomCategoryList();
       if (appState.selectedCategoryId) _renderPromptList(appState.selectedCategoryId);
       _renderSelectedPrompts();
       _renderPreview();
-      _showNotification('数据导入成功', 'success');
+      _showNotification(`数据合并成功：新增 ${addedCategories} 个分类，${addedPrompts} 个提示词`, 'success');
     } catch (error) {
       _showNotification('导入文件解析失败', 'error');
     }
@@ -503,38 +512,6 @@ export function handleCsvImport(event) {
     }
   };
   reader.readAsText(file);
-}
-
-export function parseCsvLine(line) {
-  const result = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (i + 1 < line.length && line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        current += ch;
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true;
-      } else if (ch === ',') {
-        result.push(current);
-        current = '';
-      } else {
-        current += ch;
-      }
-    }
-  }
-  result.push(current);
-  return result;
 }
 
 export function cleanDuplicatePrompts() {

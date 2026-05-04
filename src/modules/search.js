@@ -11,6 +11,8 @@ let _renderSelectedPrompts = () => {};
 let _renderPreview = () => {};
 let _saveData = () => {};
 let _getCategoryById = () => null;
+let _selectedSearchIndex = -1;
+let _searchResultItems = [];
 
 export function initSearch(elements, handlers) {
   _elements = elements;
@@ -55,8 +57,43 @@ export function initSearchEvents() {
     if (e.key === 'Escape') {
       searchInput.blur();
       searchResultsDropdown.classList.add('hidden');
+      _selectedSearchIndex = -1;
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      navigateSearchResults(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      navigateSearchResults(-1);
+    } else if (e.key === 'Enter' && _selectedSearchIndex >= 0) {
+      e.preventDefault();
+      if (_searchResultItems[_selectedSearchIndex]) {
+        _searchResultItems[_selectedSearchIndex].click();
+      }
     }
   });
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      e.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+    }
+  });
+}
+
+function navigateSearchResults(direction) {
+  if (_searchResultItems.length === 0) return;
+  if (_selectedSearchIndex >= 0 && _selectedSearchIndex < _searchResultItems.length) {
+    _searchResultItems[_selectedSearchIndex].classList.remove('search-result-keyboard-active');
+  }
+  _selectedSearchIndex += direction;
+  if (_selectedSearchIndex < 0) _selectedSearchIndex = _searchResultItems.length - 1;
+  if (_selectedSearchIndex >= _searchResultItems.length) _selectedSearchIndex = 0;
+  const item = _searchResultItems[_selectedSearchIndex];
+  if (item) {
+    item.classList.add('search-result-keyboard-active');
+    item.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 export function handleSearch() {
@@ -106,6 +143,8 @@ export function handleSearch() {
 export function renderSearchResults(results, query) {
   const searchResultsDropdown = _elements.searchResultsDropdown;
   searchResultsDropdown.innerHTML = '';
+  _selectedSearchIndex = -1;
+  _searchResultItems = [];
 
   if (results.length === 0) {
     const emptyDiv = document.createElement('div');
@@ -161,9 +200,6 @@ export function renderSearchResults(results, query) {
 
       item.addEventListener('click', () => {
         _togglePrompt(category.id, prompt);
-        if (_isPromptSelected(category.id, prompt)) {
-          _recordPromptUsage(category.id, getPromptText(prompt));
-        }
         if (appState.selectedCategoryId === category.id) {
           _renderPromptList(category.id);
         }
@@ -173,6 +209,7 @@ export function renderSearchResults(results, query) {
         renderSearchResults(results, query);
       });
 
+      _searchResultItems.push(item);
       searchResultsDropdown.appendChild(item);
     }
   }

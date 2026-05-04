@@ -21,7 +21,6 @@ const appState = {
     frequentCount: 10
   },
   promptUsage: {},
-  addingPrompt: false,
   batchMode: false,
   batchSelected: new Set(),
   bgImageData: null,

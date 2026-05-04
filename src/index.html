@@ -47,9 +47,19 @@
                 </div>
                 <div class="category-header">
                     <h2>提示词分类</h2>
-                    <button id="add-category-btn" class="btn btn-primary">
-                        新增分类
-                    </button>
+                    <div class="category-header-actions">
+                        <button id="add-category-btn" class="btn btn-primary">
+                            新增分类
+                        </button>
+                        <button id="category-batch-mode-btn" class="btn btn-secondary">
+                            <i class="fa fa-th-large"></i> 批量管理
+                        </button>
+                    </div>
+                </div>
+                <div id="category-batch-bar" class="category-batch-bar">
+                    <span class="batch-info" id="category-batch-info">已选择 0 项</span>
+                    <button id="category-batch-delete-btn" class="btn btn-danger">删除选中</button>
+                    <button id="category-batch-cancel-btn" class="btn btn-secondary">取消</button>
                 </div>
                 <ul id="category-list" class="category-list">
                 </ul>
@@ -130,6 +140,10 @@
                     <div id="random-result" class="random-result">
                         <p class="placeholder">请选择类别并点击"随机来一组"</p>
                     </div>
+                </div>
+
+                <div class="examples-section">
+                    <h3>示例组合</h3>
                 </div>
             </aside>
         </main>

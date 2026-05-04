@@ -159,24 +159,26 @@ ai-prompt/
 ├── main.js              # Electron 主进程（窗口管理、启动画面、IPC通信）
 ├── preload.js           # 预加载脚本（安全API暴露）
 ├── package.json         # 项目配置与打包设置
+├── afterPack.js         # 打包后处理（清理用户数据、嵌入图标）
+├── installer.nsh        # NSIS安装程序自定义脚本
 ├── icon.ico             # 应用图标（多尺寸：16-256px）
 ├── icon.png             # 应用图标源文件
 └── src/
     ├── index.html       # 主页面
     ├── style.css        # 样式表
+    ├── script.js        # 入口脚本
     ├── splash.html      # 启动画面
     └── modules/         # 功能模块
         ├── app.js       # 应用初始化与随机生成
+        ├── batch.js     # 批量操作（移动、删除、修改）
+        ├── cache.js     # 本地缓存机制
+        ├── constants.js # 常量定义（默认分类、示例等）
         ├── data.js      # 数据操作（分类/提示词增删改）
         ├── events.js    # 事件绑定与处理
         ├── render.js    # UI渲染（分类列表、提示词列表、预览等）
-        ├── state.js     # 全局状态管理
-        ├── settings.js  # 设置管理
         ├── search.js    # 搜索功能
-        ├── sort.js      # 排序功能
-        ├── cache.js     # 本地缓存机制
-        ├── batchops.js  # 批量操作
-        ├── export.js    # 导出功能
+        ├── settings.js  # 设置管理
+        ├── state.js     # 全局状态管理与持久化
         ├── translate.js # 翻译模块
         └── utils.js     # 工具函数
 ```
