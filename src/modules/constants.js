@@ -142,4 +142,4 @@ export const NOTIFICATION_MAX_COUNT = 3
 export const BG_IMAGE_MAX_SIZE = 10 * 1024 * 1024
 export const BATCH_TRANSLATE_INTERVAL = 100
 export const SAVE_DATA_DEBOUNCE = 300
-export const DATA_VERSION = 1
+export const DATA_VERSION = 2

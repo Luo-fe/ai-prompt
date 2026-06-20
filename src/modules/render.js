@@ -108,6 +108,15 @@ export function cacheElements() {
   elements.categoryBatchInfo = document.getElementById('category-batch-info');
   elements.categoryBatchDeleteBtn = document.getElementById('category-batch-delete-btn');
   elements.categoryBatchCancelBtn = document.getElementById('category-batch-cancel-btn');
+  elements.rightClickCopyEnabled = document.getElementById('right-click-copy-enabled');
+  elements.rccIncludeOriginal = document.getElementById('rcc-include-original');
+  elements.rccIncludeTranslation = document.getElementById('rcc-include-translation');
+  elements.rccConnector = document.getElementById('rcc-connector');
+  elements.rccCustomConnector = document.getElementById('rcc-custom-connector');
+  elements.rccPreviewText = document.getElementById('rcc-preview-text');
+  elements.exportShortcutInput = document.getElementById('export-shortcut-input');
+  elements.exportShortcutResetBtn = document.getElementById('export-shortcut-reset-btn');
+  elements.exportShortcutTarget = document.getElementById('export-shortcut-target');
 }
 
 export function renderCategoryList() {
@@ -240,7 +249,7 @@ export function renderCustomCategoryList() {
   elements.customCategoryList.appendChild(frag);
 }
 
-function handlePromptToggle(categoryId, prompt, item, cb) {
+function handlePromptToggle(categoryId, prompt) {
   handlers.togglePrompt(categoryId, prompt);
   renderPromptList(categoryId);
 }
@@ -273,7 +282,7 @@ export function renderPromptList(categoryId) {
     cb.type = 'checkbox';
     cb.className = 'prompt-checkbox';
     cb.checked = handlers.isPromptSelected(category.id, prompt);
-    cb.addEventListener('change', () => handlePromptToggle(category.id, prompt, item, cb));
+    cb.addEventListener('change', () => handlePromptToggle(category.id, prompt));
 
     const batchCb = document.createElement('input');
     batchCb.type = 'checkbox';
@@ -304,9 +313,18 @@ export function renderPromptList(categoryId) {
     item.addEventListener('click', e => {
       if (e.target !== cb && !e.target.closest('.editable-translation') && !e.target.closest('.inline-translate-btn') && !e.target.closest('.translation-edit-input') && !e.target.closest('.batch-checkbox')) {
         cb.checked = !cb.checked;
-        handlePromptToggle(category.id, prompt, item, cb);
+        handlePromptToggle(category.id, prompt);
       }
     });
+    if (appState.settings.rightClickCopyEnabled) {
+      item.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        const text = buildRightClickCopyText(prompt);
+        navigator.clipboard.writeText(text)
+          .then(() => showNotification(`已复制: ${text.length > 30 ? text.substring(0, 30) + '...' : text}`, 'success'))
+          .catch(() => showNotification('复制失败', 'error'));
+      });
+    }
     frag.appendChild(item);
   });
   elements.promptList.appendChild(frag);
@@ -626,22 +644,31 @@ export function showConfirmDialog(title, message, icon, onConfirm) {
     elements.confirmTitle.textContent = title;
     elements.confirmMessage.textContent = message;
     elements.confirmDialog.classList.add('active');
+
+    const cleanup = () => {
+      elements.confirmDialog.removeEventListener('keydown', keyHandler);
+    };
+
+    const keyHandler = (e) => {
+      if (e.key === 'Escape') {
+        elements.confirmDialog.classList.remove('active');
+        cleanup();
+        resolve(false);
+      }
+    };
+
     elements.confirmOkBtn.onclick = () => {
       elements.confirmDialog.classList.remove('active');
+      cleanup();
       if (onConfirm) onConfirm();
       resolve(true);
     };
     elements.confirmCancelBtn.onclick = () => {
       elements.confirmDialog.classList.remove('active');
+      cleanup();
       resolve(false);
     };
-    elements.confirmDialog.addEventListener('keydown', function handler(e) {
-      if (e.key === 'Escape') {
-        elements.confirmDialog.classList.remove('active');
-        elements.confirmDialog.removeEventListener('keydown', handler);
-        resolve(false);
-      }
-    });
+    elements.confirmDialog.addEventListener('keydown', keyHandler);
   });
 }
 
@@ -842,3 +869,22 @@ export async function categoryBatchDelete() {
 }
 
 export { _categoryBatchMode };
+
+export function buildRightClickCopyText(prompt) {
+  const config = appState.settings.rightClickCopyConfig || {
+    includeOriginal: true, includeTranslation: true, connector: ', ', order: 'original-first'
+  };
+  const original = getPromptText(prompt);
+  const translation = getPromptTranslation(prompt);
+  const parts = [];
+  if (config.order === 'translation-first') {
+    if (config.includeTranslation && translation) parts.push(translation);
+    if (config.includeOriginal) parts.push(original);
+  } else {
+    if (config.includeOriginal) parts.push(original);
+    if (config.includeTranslation && translation) parts.push(translation);
+  }
+  if (parts.length === 0) return original;
+  if (parts.length === 1) return parts[0];
+  return parts.join(config.connector);
+}

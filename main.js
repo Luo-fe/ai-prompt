@@ -14,7 +14,7 @@ const SPLASH_WIDTH = 420;
 const SPLASH_HEIGHT = 280;
 const MIN_SPLASH_MS = 800;
 
-const SPLASH_HTML = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:${SPLASH_BG}}body{display:flex;align-items:center;justify-content:center;font-family:'Microsoft YaHei','Segoe UI',sans-serif;color:#e0e0e0}.w{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)}.ic{width:72px;height:72px;border-radius:18px;margin-bottom:20px;background:linear-gradient(135deg,#4a90d9,#2d6cc0);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(74,144,217,.3)}.ic span{font-size:36px;color:#fff;line-height:1;text-shadow:0 2px 4px rgba(0,0,0,.2)}.n{font-size:20px;font-weight:600;letter-spacing:1px;margin-bottom:6px;color:#c8d8f0}.v{font-size:12px;color:rgba(255,255,255,.4);margin-bottom:28px}.ld{width:120px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}.lb{width:0;height:100%;background:linear-gradient(90deg,#4a90d9,#a0c4ff);border-radius:2px;animation:l 1.4s ease-in-out infinite}@keyframes l{0%{width:0;margin-left:0}50%{width:50%;margin-left:25%}100%{width:0;margin-left:100%}}.t{margin-top:12px;font-size:11px;color:rgba(255,255,255,.3)}</style></head><body><div class="w"><div class="ic"><span>L</span></div><div class="n">Luo-fe 本地提示词管理器</div><div class="v">版本 1.2</div><div class="ld"><div class="lb"></div></div><div class="t">正在启动...</div></div></body></html>`;
+const SPLASH_HTML = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:${SPLASH_BG}}body{display:flex;align-items:center;justify-content:center;font-family:'Microsoft YaHei','Segoe UI',sans-serif;color:#e0e0e0}.w{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)}.ic{width:72px;height:72px;border-radius:18px;margin-bottom:20px;background:linear-gradient(135deg,#4a90d9,#2d6cc0);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(74,144,217,.3)}.ic span{font-size:36px;color:#fff;line-height:1;text-shadow:0 2px 4px rgba(0,0,0,.2)}.n{font-size:20px;font-weight:600;letter-spacing:1px;margin-bottom:6px;color:#c8d8f0}.v{font-size:12px;color:rgba(255,255,255,.4);margin-bottom:28px}.ld{width:120px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}.lb{width:0;height:100%;background:linear-gradient(90deg,#4a90d9,#a0c4ff);border-radius:2px;animation:l 1.4s ease-in-out infinite}@keyframes l{0%{width:0;margin-left:0}50%{width:50%;margin-left:25%}100%{width:0;margin-left:100%}}.t{margin-top:12px;font-size:11px;color:rgba(255,255,255,.3)}</style></head><body><div class="w"><div class="ic"><span>L</span></div><div class="n">Luo-fe 本地提示词管理器</div><div class="v">版本 1.3</div><div class="ld"><div class="lb"></div></div><div class="t">正在启动...</div></div></body></html>`;
 
 function getAppDataDir() {
   const exeDir = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath('exe'));
@@ -130,7 +130,7 @@ function createWindow() {
     height: windowState.height,
     minWidth: 900,
     minHeight: 600,
-    title: 'Luo-fe的本地提示词管理器 v1.2',
+    title: 'Luo-fe的本地提示词管理器 v1.3',
     icon: iconPath,
     frame: false,
     show: false,
@@ -168,7 +168,7 @@ function createWindow() {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data: blob:; connect-src https://api.mymemory.translated.net https://*;"]
+        'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data: blob:; connect-src https://api.mymemory.translated.net;"]
       }
     });
   });
@@ -297,6 +297,17 @@ ipcMain.handle('cache-read', async (event, key) => {
         fs.unlinkSync(filePath);
         return { success: false, error: 'Integrity check failed' };
       }
+      // 验证 data 与 rawJson 一致，防止篡改 data 字段
+      try {
+        const parsedFromRaw = JSON.parse(cached.rawJson);
+        if (JSON.stringify(parsedFromRaw) !== JSON.stringify(cached.data)) {
+          fs.unlinkSync(filePath);
+          return { success: false, error: 'Data mismatch' };
+        }
+      } catch {
+        fs.unlinkSync(filePath);
+        return { success: false, error: 'Data parse error' };
+      }
     }
     return { success: true, data: cached.data, timestamp: cached.timestamp };
   } catch (err) {
@@ -392,9 +403,21 @@ ipcMain.handle('cache-info', async () => {
   }
 });
 
-app.setAppUserModelId('com.luofe.prompt-manager');
+ipcMain.handle('save-export-file', async (event, defaultName, content) => {
+  try {
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: defaultName,
+      filters: [{ name: 'All Files', extensions: ['*'] }]
+    });
+    if (canceled || !filePath) return { success: false, canceled: true };
+    fs.writeFileSync(filePath, content, 'utf-8');
+    return { success: true, filePath };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
 
-app.commandLine.appendSwitch('disable-software-rasterizer');
+app.setAppUserModelId('com.luofe.prompt-manager');
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err.message);

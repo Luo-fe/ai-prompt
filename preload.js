@@ -13,5 +13,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cacheWrite: (key, data) => ipcRenderer.invoke('cache-write', key, data),
   cacheDelete: (key) => ipcRenderer.invoke('cache-delete', key),
   cacheClear: () => ipcRenderer.invoke('cache-clear'),
-  cacheInfo: () => ipcRenderer.invoke('cache-info')
+  cacheInfo: () => ipcRenderer.invoke('cache-info'),
+  saveExportFile: (defaultName, content) => ipcRenderer.invoke('save-export-file', defaultName, content)
 });

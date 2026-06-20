@@ -12,8 +12,13 @@ export function initEvents(els, h) {
   handlers = h;
 }
 
+// 安全绑定事件，元素不存在时跳过而非中断后续绑定
+function on(el, type, fn) {
+  if (el) el.addEventListener(type, fn);
+}
+
 export function bindEvents() {
-  elements.addCategoryBtn.addEventListener('click', () => {
+  on(elements.addCategoryBtn, 'click', () => {
     elements.categoryModal.style.display = 'block';
     handlers.renderCustomCategoryList();
   });
@@ -41,7 +46,7 @@ export function bindEvents() {
     });
   }
 
-  elements.saveCategoryBtn.addEventListener('click', () => {
+  on(elements.saveCategoryBtn, 'click', () => {
     const name = elements.newCategoryName.value;
     if (name.trim()) {
       handlers.addCategory(name);
@@ -49,7 +54,7 @@ export function bindEvents() {
     }
   });
 
-  elements.newCategoryName.addEventListener('keydown', (e) => {
+  on(elements.newCategoryName, 'keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       const name = elements.newCategoryName.value;
@@ -89,7 +94,7 @@ export function bindEvents() {
     });
   }
 
-  elements.editPromptsBtn.addEventListener('click', () => {
+  on(elements.editPromptsBtn, 'click', () => {
     if (appState.selectedCategoryId || elements.promptModal?.dataset?.categoryId) {
       handlers.openPromptModal(appState.selectedCategoryId || elements.promptModal.dataset.categoryId);
     } else {
@@ -97,7 +102,7 @@ export function bindEvents() {
     }
   });
 
-  elements.savePromptBtn.addEventListener('click', (e) => {
+  on(elements.savePromptBtn, 'click', (e) => {
     e.preventDefault();
     e.stopPropagation();
     const categoryId = elements.promptModal.dataset.categoryId;
@@ -114,7 +119,7 @@ export function bindEvents() {
     handlers.addPrompt(categoryId, text);
   });
 
-  elements.newPromptText.addEventListener('keydown', (e) => {
+  on(elements.newPromptText, 'keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
@@ -127,16 +132,16 @@ export function bindEvents() {
     }
   });
 
-  elements.batchImportBtn.addEventListener('click', () => {
+  on(elements.batchImportBtn, 'click', () => {
     const categoryId = elements.promptModal.dataset.categoryId;
     if (categoryId) handlers.batchImportPrompts(categoryId, elements.batchImport.value);
   });
 
-  elements.selectAllBtn.addEventListener('click', () => handlers.selectAllPrompts());
-  elements.deselectAllBtn.addEventListener('click', () => handlers.deselectAllPrompts());
-  elements.clearSelectedBtn.addEventListener('click', () => handlers.clearAllSelectedPrompts());
-  elements.randomGenerateBtn.addEventListener('click', () => handlers.generateRandomPrompts());
-  elements.exportBtn.addEventListener('click', () => handlers.openExportModal());
+  on(elements.selectAllBtn, 'click', () => handlers.selectAllPrompts());
+  on(elements.deselectAllBtn, 'click', () => handlers.deselectAllPrompts());
+  on(elements.clearSelectedBtn, 'click', () => handlers.clearAllSelectedPrompts());
+  on(elements.randomGenerateBtn, 'click', () => handlers.generateRandomPrompts());
+  on(elements.exportBtn, 'click', () => handlers.openExportModal());
 
   document.querySelectorAll('input[name="export-format"]').forEach((radio) => {
     radio.addEventListener('change', () => {
@@ -154,8 +159,8 @@ export function bindEvents() {
 
   document.getElementById('custom-delimiter').addEventListener('input', () => handlers.updateExportPreview());
 
-  elements.copyToClipboardBtn.addEventListener('click', () => handlers.copyToClipboard());
-  elements.downloadFileBtn.addEventListener('click', () => handlers.downloadFile());
+  on(elements.copyToClipboardBtn, 'click', () => handlers.copyToClipboard());
+  on(elements.downloadFileBtn, 'click', () => handlers.downloadFile());
 
   document.querySelectorAll('.modal .close').forEach((btn) => {
     btn.addEventListener('click', function () {
@@ -168,7 +173,7 @@ export function bindEvents() {
     if (e.target.classList.contains('modal')) handlers.closeModal(e.target.id);
   });
 
-  elements.mobileToggle.addEventListener('click', () => {
+  on(elements.mobileToggle, 'click', () => {
     elements.categoryPanel.classList.toggle('active');
     let overlay = document.querySelector('.overlay');
     if (!overlay) {
@@ -191,8 +196,8 @@ export function bindEvents() {
     }
   }, 150));
 
-  elements.settingsBtn.addEventListener('click', () => handlers.openSettingsModal());
-  elements.translateAllBtn.addEventListener('click', () => handlers.translateAllPrompts());
+  on(elements.settingsBtn, 'click', () => handlers.openSettingsModal());
+  on(elements.translateAllBtn, 'click', () => handlers.translateAllPrompts());
 
   if (window.electronAPI) {
     const minBtn = document.getElementById('win-minimize');

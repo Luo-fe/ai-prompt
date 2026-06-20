@@ -1,6 +1,6 @@
 {
   "name": "luo-fe-prompt-manager",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Luo-fe本地提示词管理器 - AI文生图提示词工具",
   "main": "main.js",
   "scripts": {
@@ -54,7 +54,7 @@
       ]
     },
     "portable": {
-      "artifactName": "Luo-fe本地提示词管理器_v1.2_便携版.exe"
+      "artifactName": "Luo-fe本地提示词管理器_v1.3_便携版.exe"
     },
     "nsis": {
       "oneClick": false,
@@ -63,7 +63,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Luo-fe的本地提示词管理器",
-      "artifactName": "Luo-fe本地提示词管理器_v1.2_安装版.exe",
+      "artifactName": "Luo-fe本地提示词管理器_v1.3_安装版.exe",
       "include": "installer.nsh",
       "deleteAppDataOnUninstall": false
     },

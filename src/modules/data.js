@@ -1,5 +1,5 @@
 import { appState, saveData, saveDataImmediate, saveSettingsToStorage, saveTranslations, recordPromptUsage } from './state.js';
-import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, findPromptIndex, downloadBlob, iterateBatchSelected, createPromptKey, parseCsvLine } from './utils.js';
+import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, findPromptIndex, iterateBatchSelected, createPromptKey } from './utils.js';
 
 let _translateText = async () => '';
 let _showConfirm = async () => false;
@@ -98,7 +98,7 @@ export async function editCategory(categoryId) {
 }
 
 export async function deleteCategory(categoryId) {
-  const confirmed = await _showConfirm('删除分类', '确定要删除此分类及其所有提示词吗？', 'warning');
+  const confirmed = await _showConfirm('删除分类', '确定要删除此分类及其所有提示词吗？', '⚠️');
   if (!confirmed) return;
   delete appState.selectedPrompts[categoryId];
   appState.categories = appState.categories.filter(cat => cat.id !== categoryId);
@@ -120,7 +120,7 @@ export async function batchDeleteCategories(categoryIds) {
     _showNotification('请选择要删除的分类', 'warning');
     return;
   }
-  const confirmed = await _showConfirm('批量删除分类', `确定要删除选中的 ${categoryIds.length} 个分类及其所有提示词吗？`, 'warning');
+  const confirmed = await _showConfirm('批量删除分类', `确定要删除选中的 ${categoryIds.length} 个分类及其所有提示词吗？`, '⚠️');
   if (!confirmed) return;
   for (const id of categoryIds) {
     delete appState.selectedPrompts[id];
@@ -226,7 +226,7 @@ export async function editPrompt(categoryId, index) {
 export async function deletePrompt(categoryId, index) {
   const category = getCategoryById(appState.categories, categoryId);
   if (!category || index < 0 || index >= category.prompts.length) return;
-  const confirmed = await _showConfirm('删除提示词', '确定要删除此提示词吗？', 'warning');
+  const confirmed = await _showConfirm('删除提示词', '确定要删除此提示词吗？', '⚠️');
   if (!confirmed) return;
   const removed = category.prompts.splice(index, 1)[0];
   const removedText = getPromptText(removed);
@@ -367,151 +367,6 @@ export function syncSelectedPromptsTranslations() {
     }
   }
   saveData();
-}
-
-export function exportAllData() {
-  const data = {
-    categories: appState.categories,
-    settings: appState.settings,
-    translations: appState.translations,
-    promptUsage: appState.promptUsage,
-    selectedPrompts: appState.selectedPrompts,
-    nextCategoryId: appState.nextCategoryId,
-    bgImageData: appState.bgImageData || null,
-    exportDate: new Date().toISOString()
-  };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  downloadBlob(blob, `ai-prompt-tool-backup-${new Date().toISOString().slice(0, 10)}.json`);
-}
-
-export function exportCsv() {
-  const BOM = '\uFEFF';
-  let csv = BOM + '分类,提示词,翻译\n';
-  for (const category of appState.categories) {
-    for (const prompt of category.prompts) {
-      const text = getPromptText(prompt).replace(/"/g, '""');
-      const translation = getPromptTranslation(prompt).replace(/"/g, '""');
-      const name = category.name.replace(/"/g, '""');
-      csv += `"${name}","${text}","${translation}"\n`;
-    }
-  }
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  downloadBlob(blob, `ai-prompt-tool-export-${new Date().toISOString().slice(0, 10)}.csv`);
-}
-
-export async function handleFileImport(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    try {
-      const data = JSON.parse(e.target.result);
-      if (!data.categories || !Array.isArray(data.categories)) {
-        _showNotification('无效的导入文件格式', 'error');
-        return;
-      }
-
-      let addedCategories = 0;
-      let addedPrompts = 0;
-
-      for (const cat of data.categories) {
-        const existing = appState.categories.find(c => c.id === cat.id || c.name === cat.name);
-        if (existing) {
-          const existingTexts = new Set(existing.prompts.map(p => getPromptText(p).toLowerCase()));
-          for (const prompt of cat.prompts) {
-            const text = getPromptText(prompt);
-            if (!existingTexts.has(text.toLowerCase())) {
-              existing.prompts.push(prompt);
-              existingTexts.add(text.toLowerCase());
-              addedPrompts++;
-            }
-          }
-        } else {
-          appState.categories.push(cat);
-          addedCategories++;
-        }
-      }
-
-      if (data.settings) Object.assign(appState.settings, data.settings);
-      if (data.translations) Object.assign(appState.translations, data.translations);
-      if (data.promptUsage) Object.assign(appState.promptUsage, data.promptUsage);
-      if (data.nextCategoryId && data.nextCategoryId > appState.nextCategoryId) {
-        appState.nextCategoryId = data.nextCategoryId;
-      }
-      if (data.bgImageData) appState.bgImageData = data.bgImageData;
-
-      saveDataImmediate();
-      saveSettingsToStorage();
-      saveTranslations();
-      appState.selectedCategoryId = appState.selectedCategoryId || (appState.categories.length > 0 ? appState.categories[0].id : null);
-      _renderCategoryList();
-      _renderRandomCategorySelector();
-      _renderCustomCategoryList();
-      if (appState.selectedCategoryId) _renderPromptList(appState.selectedCategoryId);
-      _renderSelectedPrompts();
-      _renderPreview();
-      _showNotification(`数据合并成功：新增 ${addedCategories} 个分类，${addedPrompts} 个提示词`, 'success');
-    } catch (error) {
-      _showNotification('导入文件解析失败', 'error');
-    }
-  };
-  reader.readAsText(file);
-}
-
-export function handleCsvImport(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const text = e.target.result;
-      const lines = text.split('\n');
-      if (lines.length < 2) {
-        _showNotification('CSV文件为空', 'error');
-        return;
-      }
-      const header = parseCsvLine(lines[0]);
-      const catIdx = header.indexOf('分类');
-      const textIdx = header.indexOf('提示词');
-      const transIdx = header.indexOf('翻译');
-      if (catIdx === -1 || textIdx === -1) {
-        _showNotification('CSV格式不正确，需要"分类"和"提示词"列', 'error');
-        return;
-      }
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        const fields = parseCsvLine(line);
-        const catName = fields[catIdx] || '';
-        const promptText = fields[textIdx] || '';
-        const translation = transIdx !== -1 ? (fields[transIdx] || '') : '';
-        if (!catName || !promptText) continue;
-        let category = appState.categories.find(c => c.name === catName);
-        if (!category) {
-          category = {
-            id: `custom_${appState.nextCategoryId++}`,
-            name: catName,
-            prompts: []
-          };
-          appState.categories.push(category);
-        }
-        if (!findPromptInCategory(category, promptText)) {
-          category.prompts.push({ text: promptText, translation });
-        }
-      }
-      saveData();
-      _renderCategoryList();
-      _renderRandomCategorySelector();
-      _renderCustomCategoryList();
-      if (appState.selectedCategoryId) _renderPromptList(appState.selectedCategoryId);
-      _renderSelectedPrompts();
-      _renderPreview();
-      _showNotification('CSV导入成功', 'success');
-    } catch (error) {
-      _showNotification('CSV解析失败', 'error');
-    }
-  };
-  reader.readAsText(file);
 }
 
 export function cleanDuplicatePrompts() {

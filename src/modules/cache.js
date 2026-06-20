@@ -75,25 +75,6 @@ async function getCacheInfo() {
   }
 }
 
-async function loadAllFromCache() {
-  if (!isCacheAvailable()) return null;
-  const results = {};
-  const keys = [CACHE_KEYS.DATA, CACHE_KEYS.SETTINGS, CACHE_KEYS.TRANSLATIONS, CACHE_KEYS.USAGE];
-  const promises = keys.map(key => readCache(key).then(data => { results[key] = data; }));
-  await Promise.all(promises);
-  return results;
-}
-
-async function saveAllToCache(data, settings, translations, usage) {
-  if (!isCacheAvailable()) return;
-  const promises = [];
-  if (data) promises.push(writeCache(CACHE_KEYS.DATA, data));
-  if (settings) promises.push(writeCache(CACHE_KEYS.SETTINGS, settings));
-  if (translations) promises.push(writeCache(CACHE_KEYS.TRANSLATIONS, translations));
-  if (usage) promises.push(writeCache(CACHE_KEYS.USAGE, usage));
-  await Promise.all(promises);
-}
-
 export {
   CACHE_KEYS,
   CACHE_TTL,
@@ -102,7 +83,5 @@ export {
   writeCache,
   deleteCache,
   clearAllCache,
-  getCacheInfo,
-  loadAllFromCache,
-  saveAllToCache
+  getCacheInfo
 };

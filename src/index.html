@@ -1,7 +1,7 @@
 <html lang="zh-CN"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Luo-fe的本地提示词管理器 v1.2</title>
+    <title>Luo-fe的本地提示词管理器 v1.3</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css">
 </head>
@@ -11,7 +11,7 @@
         <header class="navbar" id="navbar">
             <div class="titlebar-drag">
                 <div class="logo">
-                    <h1>Luo-fe的本地提示词管理器 v1.2</h1>
+                    <h1>Luo-fe的本地提示词管理器 v1.3</h1>
                 </div>
             </div>
             <div class="nav-actions">
@@ -81,6 +81,10 @@
                         <button id="batch-mode-btn" class="btn btn-secondary">
                             <i class="fa fa-th-large"></i> 批量操作
                         </button>
+                        <label class="right-click-copy-toggle" title="勾选后可在提示词上右键一键复制">
+                            <input type="checkbox" id="right-click-copy-enabled">
+                            <span>开启右键复制</span>
+                        </label>
                     </div>
                 </div>
                 <div id="batch-mode-bar" class="batch-mode-bar">
@@ -223,6 +227,7 @@
                         <label><input type="radio" name="export-format" value="text" checked=""> 纯文本</label>
                         <label><input type="radio" name="export-format" value="json"> JSON</label>
                         <label><input type="radio" name="export-format" value="markdown"> Markdown</label>
+                        <label><input type="radio" name="export-format" value="csv"> CSV</label>
                     </div>
                 </div>
                 <div class="form-group" id="delimiter-option">
@@ -364,6 +369,69 @@
                     <button id="clear-usage-btn" class="btn btn-danger clear-usage-btn">
                         <i class="fa fa-trash"></i> 一键清空提示词使用记录
                     </button>
+                </div>
+                <div class="settings-section">
+                    <h4>右键复制设置</h4>
+                    <p class="settings-desc">自定义右键复制提示词时的格式，可勾选需要复制的内容并设置连结符号。</p>
+                    <div class="right-click-copy-config">
+                        <div class="setting-item">
+                            <label class="switch">
+                                <input type="checkbox" id="rcc-include-original" checked>
+                                <span class="slider round"></span>
+                            </label>
+                            <span>提示词原词</span>
+                        </div>
+                        <div class="setting-item">
+                            <label class="switch">
+                                <input type="checkbox" id="rcc-include-translation" checked>
+                                <span class="slider round"></span>
+                            </label>
+                            <span>提示词翻译</span>
+                        </div>
+                        <div class="setting-item">
+                            <label for="rcc-connector">连结符号:</label>
+                            <select id="rcc-connector" class="form-input" style="width:auto;min-width:120px">
+                                <option value=", ">逗号空格 (, )</option>
+                                <option value=",">逗号 (,)</option>
+                                <option value="-">连字符 (-)</option>
+                                <option value=" - ">连字符空格 ( - )</option>
+                                <option value=":">冒号 (:)</option>
+                                <option value=" / ">斜杠 (/)</option>
+                                <option value=" ">空格</option>
+                                <option value="custom">自定义</option>
+                            </select>
+                            <input type="text" id="rcc-custom-connector" class="form-input" placeholder="自定义符号" style="width:100px;display:none">
+                        </div>
+                        <div class="setting-item">
+                            <label>排列顺序:</label>
+                            <div class="radio-group" style="margin-bottom:0">
+                                <label><input type="radio" name="rcc-order" value="original-first" checked> 原词在前</label>
+                                <label><input type="radio" name="rcc-order" value="translation-first"> 翻译在前</label>
+                            </div>
+                        </div>
+                        <div class="rcc-preview-box">
+                            <span class="rcc-preview-label">预览:</span>
+                            <span id="rcc-preview-text" class="rcc-preview-text">apple, 苹果</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h4>快捷键设置</h4>
+                    <div class="setting-item">
+                        <label for="export-shortcut-input">一键导出选中提示词:</label>
+                        <input type="text" id="export-shortcut-input" class="form-input" readonly placeholder="点击此处按键设置" style="width:180px;cursor:pointer">
+                        <button id="export-shortcut-reset-btn" class="btn btn-secondary btn-small">重置默认</button>
+                    </div>
+                    <div class="setting-item">
+                        <label for="export-shortcut-target">导出方式:</label>
+                        <select id="export-shortcut-target" class="form-input" style="width:auto;min-width:160px">
+                            <option value="clipboard">复制到剪贴板</option>
+                            <option value="csv">导出为CSV文件</option>
+                            <option value="markdown">导出为Markdown文件</option>
+                            <option value="js">导出为JS文件</option>
+                        </select>
+                    </div>
+                    <p class="settings-desc">点击输入框后按下组合键设置快捷键（默认: Ctrl+Shift+E）。选择"复制到剪贴板"时将选中提示词的原词以英文逗号隔开复制到剪贴板；选择文件导出时将选中提示词的类别、词语和翻译导出为对应格式文件，可选择保存位置。</p>
                 </div>
                 <div class="settings-section">
                     <h4>缓存管理</h4>

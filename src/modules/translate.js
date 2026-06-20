@@ -3,7 +3,6 @@ import { FALLBACK_TRANSLATIONS, API_TIMEOUT, BATCH_TRANSLATE_INTERVAL, DEFAULT_C
 
 let _syncSelectedPromptsTranslations = () => {};
 let _saveData = () => {};
-let _showNotification = () => {};
 let _translateAllProgressCallback = null;
 
 export function setTranslateAllProgressCallback(cb) {
@@ -209,8 +208,5 @@ export function setTranslateHandlers(handlers) {
   }
   if (handlers.saveData) {
     _saveData = handlers.saveData;
-  }
-  if (handlers.showNotification) {
-    _showNotification = handlers.showNotification;
   }
 }

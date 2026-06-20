@@ -2898,3 +2898,147 @@ body.bg-clarity-mode .search-input-wrapper {
   from { width: 100%; }
   to { width: 0%; }
 }
+
+/* ================================
+   Right-Click Copy Toggle
+   ================================ */
+
+.right-click-copy-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--border-radius-sm);
+  transition: var(--transition-fast);
+  user-select: none;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.right-click-copy-toggle:hover {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+}
+
+.right-click-copy-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--primary-color);
+}
+
+.right-click-copy-toggle input[type="checkbox"]:checked + span {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+/* ================================
+   Context Menu
+   ================================ */
+
+.prompt-context-menu {
+  position: fixed;
+  z-index: 10001;
+  min-width: 140px;
+  background: var(--panel-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  box-shadow: var(--shadow-lg);
+  padding: 0.3rem 0;
+  animation: contextMenuIn 0.15s ease;
+}
+
+@keyframes contextMenuIn {
+  from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.84rem;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  color: var(--text-color);
+}
+
+.context-menu-item:hover {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+}
+
+.context-menu-item.primary {
+  font-weight: 600;
+  color: var(--primary-color);
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 0.2rem;
+}
+
+.context-menu-item.primary:hover {
+  background: var(--primary-gradient);
+  color: white;
+}
+
+.context-menu-item i {
+  width: 16px;
+  text-align: center;
+  font-size: 0.82rem;
+}
+
+/* ================================
+   Right-Click Copy Settings
+   ================================ */
+
+.right-click-copy-config {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.right-click-copy-config .setting-item {
+  margin-bottom: 0;
+}
+
+.rcc-preview-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--panel-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  margin-top: 0.4rem;
+}
+
+.rcc-preview-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.rcc-preview-text {
+  font-size: 0.86rem;
+  color: var(--primary-color);
+  font-weight: 600;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* ================================
+   Export Shortcut Input
+   ================================ */
+
+#export-shortcut-input {
+  text-align: center;
+  font-weight: 600;
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: var(--primary-color);
+}
+
+#export-shortcut-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}

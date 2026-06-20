@@ -7,6 +7,7 @@ const appState = {
   selectedCategoryId: null,
   selectedPrompts: {},
   nextCategoryId: 1,
+  dataVersion: 0,
   translations: {},
   settings: {
     translationEnabled: true,
@@ -18,7 +19,16 @@ const appState = {
     panelOpacity: 95,
     panelStyle: 'frosted',
     bgClarityMode: false,
-    frequentCount: 10
+    frequentCount: 10,
+    rightClickCopyEnabled: false,
+    rightClickCopyConfig: {
+      includeOriginal: true,
+      includeTranslation: true,
+      connector: ', ',
+      order: 'original-first'
+    },
+    exportShortcut: 'Ctrl+Shift+E',
+    exportShortcutTarget: 'clipboard'
   },
   promptUsage: {},
   batchMode: false,
@@ -43,12 +53,14 @@ function loadData() {
       appState.categories = data.categories || [];
       appState.selectedPrompts = data.selectedPrompts || {};
       appState.nextCategoryId = data.nextCategoryId || 1;
+      appState.dataVersion = data.dataVersion || 0;
     }
   } catch (error) {
     console.warn('loadData parse error, using DEFAULT_CATEGORIES:', error);
     appState.categories = [];
     appState.selectedPrompts = {};
     appState.nextCategoryId = 1;
+    appState.dataVersion = 0;
   }
   ensureDefaultCategories();
 }
@@ -61,6 +73,7 @@ async function loadDataFromCache() {
       appState.categories = cached.categories || [];
       appState.selectedPrompts = cached.selectedPrompts || {};
       appState.nextCategoryId = cached.nextCategoryId || 1;
+      appState.dataVersion = cached.dataVersion || 0;
       ensureDefaultCategories();
       return true;
     }
@@ -74,7 +87,8 @@ const debouncedSaveData = debounce(() => {
   const data = {
     categories: appState.categories,
     selectedPrompts: appState.selectedPrompts,
-    nextCategoryId: appState.nextCategoryId
+    nextCategoryId: appState.nextCategoryId,
+    dataVersion: appState.dataVersion
   };
   try {
     localStorage.setItem('aiPromptToolData', JSON.stringify(data));
@@ -139,6 +153,14 @@ function loadSettings() {
     const raw = localStorage.getItem('aiPromptToolSettings');
     if (raw) {
       const data = JSON.parse(raw);
+      // 深度合并 rightClickCopyConfig，避免部分缓存覆盖默认值
+      if (data.rightClickCopyConfig) {
+        appState.settings.rightClickCopyConfig = {
+          ...appState.settings.rightClickCopyConfig,
+          ...data.rightClickCopyConfig
+        };
+        delete data.rightClickCopyConfig;
+      }
       Object.assign(appState.settings, data);
     }
     const bgCache = localStorage.getItem('aiPromptToolBgCache');
@@ -155,6 +177,14 @@ async function loadSettingsFromCache() {
   try {
     const cached = await readCache(CACHE_KEYS.SETTINGS);
     if (cached) {
+      // 深度合并 rightClickCopyConfig，避免部分缓存覆盖默认值
+      if (cached.rightClickCopyConfig) {
+        appState.settings.rightClickCopyConfig = {
+          ...appState.settings.rightClickCopyConfig,
+          ...cached.rightClickCopyConfig
+        };
+        delete cached.rightClickCopyConfig;
+      }
       Object.assign(appState.settings, cached);
       return true;
     }

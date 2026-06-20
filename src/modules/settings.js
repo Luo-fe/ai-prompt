@@ -41,9 +41,80 @@ export function openSettingsModal(elements) {
     (appState.settings.panelStyle === 'transparent' ? elements.panelStyleTransparent : elements.panelStyleFrosted).checked = true;
   }
   if (elements.frequentCountInput) elements.frequentCountInput.value = appState.settings.frequentCount || 10;
+  if (elements.rightClickCopyEnabled) elements.rightClickCopyEnabled.checked = appState.settings.rightClickCopyEnabled || false;
+  loadRightClickCopySettings(elements);
+  if (elements.exportShortcutInput) elements.exportShortcutInput.value = appState.settings.exportShortcut || 'Ctrl+Shift+E';
+  if (elements.exportShortcutTarget) elements.exportShortcutTarget.value = appState.settings.exportShortcutTarget || 'clipboard';
   updateBgPreview(elements);
   elements.settingsModal.style.display = 'block';
   refreshCacheInfo();
+}
+
+function loadRightClickCopySettings(elements) {
+  const config = appState.settings.rightClickCopyConfig || {
+    includeOriginal: true, includeTranslation: true, connector: ', ', order: 'original-first'
+  };
+  if (elements.rccIncludeOriginal) elements.rccIncludeOriginal.checked = config.includeOriginal !== false;
+  if (elements.rccIncludeTranslation) elements.rccIncludeTranslation.checked = config.includeTranslation !== false;
+  if (elements.rccConnector) {
+    const connector = config.connector || ', ';
+    const options = [...elements.rccConnector.options].map(o => o.value);
+    if (options.includes(connector)) {
+      elements.rccConnector.value = connector;
+      if (elements.rccCustomConnector) elements.rccCustomConnector.style.display = 'none';
+    } else {
+      elements.rccConnector.value = 'custom';
+      if (elements.rccCustomConnector) {
+        elements.rccCustomConnector.style.display = 'inline-block';
+        elements.rccCustomConnector.value = connector;
+      }
+    }
+  }
+  const orderRadio = document.querySelector('input[name="rcc-order"][value="' + (config.order || 'original-first') + '"]');
+  if (orderRadio) orderRadio.checked = true;
+  updateRightClickCopyPreview(elements);
+}
+
+function updateRightClickCopyPreview(elements) {
+  if (!elements.rccPreviewText) return;
+  const config = collectRightClickCopyConfig(elements);
+  const original = 'apple';
+  const translation = '苹果';
+  const parts = [];
+  if (config.order === 'translation-first') {
+    if (config.includeTranslation) parts.push(translation);
+    if (config.includeOriginal) parts.push(original);
+  } else {
+    if (config.includeOriginal) parts.push(original);
+    if (config.includeTranslation) parts.push(translation);
+  }
+  let preview;
+  if (parts.length === 0) preview = original;
+  else if (parts.length === 1) preview = parts[0];
+  else {
+    let connector = config.connector;
+    if (connector === 'custom') connector = config.customConnector || ', ';
+    preview = parts.join(connector);
+  }
+  elements.rccPreviewText.textContent = preview;
+}
+
+function collectRightClickCopyConfig(elements) {
+  const connector = elements.rccConnector ? elements.rccConnector.value : ', ';
+  let finalConnector = connector;
+  let customConnector = '';
+  if (connector === 'custom') {
+    customConnector = elements.rccCustomConnector ? elements.rccCustomConnector.value : '';
+    finalConnector = customConnector || ', ';
+  }
+  const orderRadio = document.querySelector('input[name="rcc-order"]:checked');
+  return {
+    includeOriginal: elements.rccIncludeOriginal ? elements.rccIncludeOriginal.checked : true,
+    includeTranslation: elements.rccIncludeTranslation ? elements.rccIncludeTranslation.checked : true,
+    connector: finalConnector,
+    customConnector: customConnector,
+    order: orderRadio ? orderRadio.value : 'original-first'
+  };
 }
 
 export function saveSettings(elements) {
@@ -58,6 +129,14 @@ export function saveSettings(elements) {
   if (elements.frequentCountInput) {
     const val = parseInt(elements.frequentCountInput.value);
     if (val >= 1 && val <= 20) appState.settings.frequentCount = val;
+  }
+  if (elements.rightClickCopyEnabled) appState.settings.rightClickCopyEnabled = elements.rightClickCopyEnabled.checked;
+  appState.settings.rightClickCopyConfig = collectRightClickCopyConfig(elements);
+  if (elements.exportShortcutInput && elements.exportShortcutInput.value.trim()) {
+    appState.settings.exportShortcut = elements.exportShortcutInput.value.trim();
+  }
+  if (elements.exportShortcutTarget) {
+    appState.settings.exportShortcutTarget = elements.exportShortcutTarget.value;
   }
   saveSettingsToStorage();
   _applyBackgroundSettings();
@@ -436,6 +515,71 @@ export function bindSettingsEvents(elements) {
         refreshCacheInfo();
       } else {
         _showNotification('缓存清除失败', 'error');
+      }
+    });
+  }
+
+  if (elements.rccConnector) {
+    elements.rccConnector.addEventListener('change', (e) => {
+      if (elements.rccCustomConnector) {
+        elements.rccCustomConnector.style.display = e.target.value === 'custom' ? 'inline-block' : 'none';
+      }
+      updateRightClickCopyPreview(elements);
+    });
+  }
+  if (elements.rccCustomConnector) {
+    elements.rccCustomConnector.addEventListener('input', () => updateRightClickCopyPreview(elements));
+  }
+  if (elements.rccIncludeOriginal) {
+    elements.rccIncludeOriginal.addEventListener('change', () => updateRightClickCopyPreview(elements));
+  }
+  if (elements.rccIncludeTranslation) {
+    elements.rccIncludeTranslation.addEventListener('change', () => updateRightClickCopyPreview(elements));
+  }
+  document.querySelectorAll('input[name="rcc-order"]').forEach(radio => {
+    radio.addEventListener('change', () => updateRightClickCopyPreview(elements));
+  });
+
+  if (elements.exportShortcutInput) {
+    elements.exportShortcutInput.addEventListener('focus', () => {
+      elements.exportShortcutInput.value = '请按下组合键...';
+    });
+    elements.exportShortcutInput.addEventListener('keydown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        elements.exportShortcutInput.value = appState.settings.exportShortcut || 'Ctrl+Shift+E';
+        elements.exportShortcutInput.blur();
+        return;
+      }
+      const parts = [];
+      if (e.ctrlKey) parts.push('Ctrl');
+      if (e.shiftKey) parts.push('Shift');
+      if (e.altKey) parts.push('Alt');
+      if (e.metaKey) parts.push('Meta');
+      const keyName = e.key;
+      if (!['Control', 'Shift', 'Alt', 'Meta'].includes(keyName)) {
+        let displayKey = keyName;
+        if (keyName === ' ') displayKey = 'Space';
+        else if (keyName.length === 1) displayKey = keyName.toUpperCase();
+        parts.push(displayKey);
+        if (parts.length >= 2) {
+          elements.exportShortcutInput.value = parts.join('+');
+          elements.exportShortcutInput.blur();
+        }
+      }
+    });
+    elements.exportShortcutInput.addEventListener('blur', () => {
+      if (!elements.exportShortcutInput.value || elements.exportShortcutInput.value === '请按下组合键...') {
+        elements.exportShortcutInput.value = appState.settings.exportShortcut || 'Ctrl+Shift+E';
+      }
+    });
+  }
+  if (elements.exportShortcutResetBtn) {
+    elements.exportShortcutResetBtn.addEventListener('click', () => {
+      if (elements.exportShortcutInput) {
+        elements.exportShortcutInput.value = 'Ctrl+Shift+E';
+        _showNotification('快捷键已重置为默认值 (Ctrl+Shift+E)', 'info');
       }
     });
   }

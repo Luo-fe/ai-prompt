@@ -1,7 +1,7 @@
 import { appState, loadData, loadDataFromCache, saveData, saveDataImmediate, loadSettings, loadSettingsFromCache, saveSettingsToStorage, loadTranslations, loadTranslationsFromCache, saveTranslations, loadPromptUsage, loadUsageFromCache, savePromptUsage, recordPromptUsage, getFrequentPrompts, setNotificationHandler } from './state.js';
-import { DEFAULT_CATEGORIES, EXAMPLES } from './constants.js';
+import { DEFAULT_CATEGORIES, EXAMPLES, DATA_VERSION } from './constants.js';
 import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, findPromptIndex, debounce } from './utils.js';
-import { addCategory, addCategories, editCategory, deleteCategory, batchDeleteCategories, moveCategoryUp, moveCategoryDown, addPrompt, editPrompt, deletePrompt, batchImportPrompts, togglePrompt, selectAllPrompts, deselectAllPrompts, clearAllSelectedPrompts, isPromptSelected, isPromptSelectedByText, updatePromptTranslation, syncSelectedPromptsTranslations, exportAllData, exportCsv, handleFileImport, handleCsvImport, cleanDuplicatePrompts, setDialogHandlers as setDataDialogHandlers } from './data.js';
+import { addCategory, addCategories, editCategory, deleteCategory, batchDeleteCategories, moveCategoryUp, moveCategoryDown, addPrompt, editPrompt, deletePrompt, batchImportPrompts, togglePrompt, selectAllPrompts, deselectAllPrompts, clearAllSelectedPrompts, isPromptSelected, isPromptSelectedByText, updatePromptTranslation, syncSelectedPromptsTranslations, cleanDuplicatePrompts, setDialogHandlers as setDataDialogHandlers } from './data.js';
 import { translateText, translateAllPrompts, setTranslateHandlers, setTranslateAllProgressCallback, getFallbackTranslation } from './translate.js';
 import { initSearch, initSearchEvents, handleSearch } from './search.js';
 import { initBatch, toggleBatchMode, exitBatchMode, updateBatchInfo, batchDeletePrompts, batchMovePrompts, performBatchMove, batchEditPrompts, initBatchEvents } from './batch.js';
@@ -117,12 +117,14 @@ function getSelectedPromptsCount() {
 }
 
 function updateExportPreview() {
-  const format = document.querySelector('input[name="export-format"]:checked').value;
+  const checkedRadio = document.querySelector('input[name="export-format"]:checked');
+  const format = checkedRadio ? checkedRadio.value : 'txt';
   let preview = '';
   switch (format) {
     case 'text': preview = getAllSelectedPrompts().join(getDelimiter()); break;
     case 'json': preview = JSON.stringify(getSelectedPromptsAsObject(), null, 2); break;
     case 'markdown': preview = generateMarkdownOutput(); break;
+    case 'csv': preview = generateCsvOutput(); break;
   }
   elements.exportPreview.value = preview;
 }
@@ -166,6 +168,19 @@ function generateMarkdownOutput() {
   return md;
 }
 
+function generateCsvOutput() {
+  const escapeCsv = (str) => '"' + String(str).replace(/"/g, '""') + '"';
+  let csv = '分类,提示词,翻译\n';
+  Object.keys(appState.selectedPrompts).forEach(categoryId => {
+    const category = getCategoryById(appState.categories, categoryId);
+    if (!category) return;
+    appState.selectedPrompts[categoryId].forEach(p => {
+      csv += [escapeCsv(category.name), escapeCsv(getPromptText(p)), escapeCsv(getPromptTranslation(p))].join(',') + '\n';
+    });
+  });
+  return csv;
+}
+
 function copyToClipboard() {
   const text = elements.exportPreview.value;
   if (!text) { showNotification('没有可复制的内容', 'warning'); return; }
@@ -195,12 +210,15 @@ function downloadFile() {
 
   if (appState.selectedCategoryId) renderPromptList(appState.selectedCategoryId);
 
-  const format = document.querySelector('input[name="export-format"]:checked').value;
+  const checkedRadio = document.querySelector('input[name="export-format"]:checked');
+  const format = checkedRadio ? checkedRadio.value : 'txt';
   let filename = 'ai-prompt-combination', mimeType = 'text/plain';
   if (format === 'json') { filename += '.json'; mimeType = 'application/json'; }
   else if (format === 'markdown') { filename += '.md'; mimeType = 'text/markdown'; }
+  else if (format === 'csv') { filename += '.csv'; mimeType = 'text/csv;charset=utf-8'; }
   else filename += '.txt';
-  const blob = new Blob([text], { type: mimeType });
+  const content = format === 'csv' ? '\uFEFF' + text : text;
+  const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename;
@@ -239,6 +257,8 @@ function closeModal(modalId) {
 }
 
 function migrateData() {
+  // 已迁移过的数据跳过，避免每次启动都遍历
+  if (appState.dataVersion === DATA_VERSION) return;
   let hasChanges = false;
   for (const category of appState.categories) {
     const defaultCategory = DEFAULT_CATEGORIES.find(dc => dc.id === category.id);
@@ -264,7 +284,99 @@ function migrateData() {
       }
     }
   }
+  appState.dataVersion = DATA_VERSION;
   if (hasChanges) saveData();
+}
+
+async function exportAllDataShortcut() {
+  const target = appState.settings.exportShortcutTarget || 'clipboard';
+  const selectedCount = getSelectedPromptsCount();
+
+  if (selectedCount === 0) {
+    showNotification('请先选择提示词', 'warning');
+    return;
+  }
+
+  const selectedTexts = getAllSelectedPrompts();
+
+  // 记录使用频率，与 copyToClipboard/downloadFile 保持一致
+  Object.keys(appState.selectedPrompts).forEach(categoryId => {
+    appState.selectedPrompts[categoryId].forEach(p => {
+      recordPromptUsage(categoryId, getPromptText(p));
+    });
+  });
+  if (appState.selectedCategoryId) renderPromptList(appState.selectedCategoryId);
+
+  if (target === 'clipboard') {
+    const text = selectedTexts.join(', ');
+    try {
+      await navigator.clipboard.writeText(text);
+      showNotification(`已复制 ${selectedCount} 个提示词到剪贴板`, 'success');
+    } catch (err) {
+      showNotification('复制失败', 'error');
+    }
+    return;
+  }
+
+  let content = '';
+  let defaultName = '';
+
+  if (target === 'csv') {
+    content = '\uFEFF' + generateCsvOutput();
+    defaultName = `ai-prompt-combination-${new Date().toISOString().slice(0, 10)}.csv`;
+  } else if (target === 'markdown') {
+    content = generateMarkdownOutput();
+    defaultName = `ai-prompt-combination-${new Date().toISOString().slice(0, 10)}.md`;
+  } else if (target === 'js') {
+    content = '// AI文生图提示词导出\n';
+    content += '// 导出时间: ' + new Date().toISOString() + '\n';
+    content += 'const prompts = ' + JSON.stringify(getSelectedPromptsAsObject(), null, 2) + ';\n\n';
+    content += '// 组合提示词\n';
+    content += 'const combinedPrompt = "' + selectedTexts.join(', ') + '";\n';
+    defaultName = `ai-prompt-combination-${new Date().toISOString().slice(0, 10)}.js`;
+  }
+
+  if (window.electronAPI && window.electronAPI.saveExportFile) {
+    const result = await window.electronAPI.saveExportFile(defaultName, content);
+    if (result.success) {
+      showNotification(`已导出 ${selectedCount} 个提示词到: ${result.filePath}`, 'success');
+    } else if (!result.canceled) {
+      showNotification('导出失败: ' + (result.error || '未知错误'), 'error');
+    }
+  } else {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = defaultName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showNotification(`文件 "${defaultName}" 已下载`, 'success');
+  }
+}
+
+function parseShortcut(shortcutStr) {
+  if (!shortcutStr) return null;
+  const parts = shortcutStr.split('+').map(p => p.trim());
+  const key = parts[parts.length - 1];
+  return {
+    ctrl: parts.includes('Ctrl'),
+    shift: parts.includes('Shift'),
+    alt: parts.includes('Alt'),
+    meta: parts.includes('Meta'),
+    key: key === 'Space' ? ' ' : (key.length === 1 ? key.toLowerCase() : key)
+  };
+}
+
+function matchShortcut(e, shortcut) {
+  if (!shortcut) return false;
+  const eKey = e.key === 'Space' ? ' ' : e.key;
+  const keyMatch = eKey.length === 1
+    ? eKey.toLowerCase() === shortcut.key
+    : eKey === shortcut.key;
+  return keyMatch && e.ctrlKey === shortcut.ctrl && e.shiftKey === shortcut.shift && e.altKey === shortcut.alt && e.metaKey === shortcut.meta;
 }
 
 async function initApp() {
@@ -373,6 +485,27 @@ async function initApp() {
   migrateData();
   loadBgImageFromFile().then(() => {
     applyBackgroundSettings(elements);
+  });
+
+  if (elements.rightClickCopyEnabled) {
+    elements.rightClickCopyEnabled.checked = appState.settings.rightClickCopyEnabled || false;
+    elements.rightClickCopyEnabled.addEventListener('change', (e) => {
+      appState.settings.rightClickCopyEnabled = e.target.checked;
+      saveSettingsToStorage();
+      if (appState.selectedCategoryId) renderPromptList(appState.selectedCategoryId);
+      showNotification(e.target.checked ? '右键复制已开启' : '右键复制已关闭', 'success');
+    });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    const target = e.target;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+    const shortcutStr = appState.settings.exportShortcut || 'Ctrl+Shift+E';
+    const shortcut = parseShortcut(shortcutStr);
+    if (shortcut && matchShortcut(e, shortcut)) {
+      e.preventDefault();
+      exportAllDataShortcut().catch(err => console.error('Export shortcut error:', err));
+    }
   });
 
   const initEnd = performance.now();
