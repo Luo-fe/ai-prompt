@@ -7,7 +7,8 @@
     "start": "electron .",
     "build": "electron-builder --win portable",
     "build:nsis": "electron-builder --win nsis",
-    "build:all": "electron-builder --win"
+    "build:all": "electron-builder --win",
+    "build:portable-fast": "electron-builder --win dir && powershell -Command \"Compress-Archive -Path 'dist/win-unpacked/*' -DestinationPath 'dist/Luo-fe本地提示词管理器_v1.3_便携版.zip' -Force\""
   },
   "author": "Luo-fe",
   "productName": "Luo-fe的本地提示词管理器",

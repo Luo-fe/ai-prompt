@@ -12,7 +12,7 @@ let splashStartTime = 0;
 const SPLASH_BG = '#1a1a2e';
 const SPLASH_WIDTH = 420;
 const SPLASH_HEIGHT = 280;
-const MIN_SPLASH_MS = 800;
+const MIN_SPLASH_MS = 400;
 
 const SPLASH_HTML = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:${SPLASH_BG}}body{display:flex;align-items:center;justify-content:center;font-family:'Microsoft YaHei','Segoe UI',sans-serif;color:#e0e0e0}.w{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)}.ic{width:72px;height:72px;border-radius:18px;margin-bottom:20px;background:linear-gradient(135deg,#4a90d9,#2d6cc0);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(74,144,217,.3)}.ic span{font-size:36px;color:#fff;line-height:1;text-shadow:0 2px 4px rgba(0,0,0,.2)}.n{font-size:20px;font-weight:600;letter-spacing:1px;margin-bottom:6px;color:#c8d8f0}.v{font-size:12px;color:rgba(255,255,255,.4);margin-bottom:28px}.ld{width:120px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}.lb{width:0;height:100%;background:linear-gradient(90deg,#4a90d9,#a0c4ff);border-radius:2px;animation:l 1.4s ease-in-out infinite}@keyframes l{0%{width:0;margin-left:0}50%{width:50%;margin-left:25%}100%{width:0;margin-left:100%}}.t{margin-top:12px;font-size:11px;color:rgba(255,255,255,.3)}</style></head><body><div class="w"><div class="ic"><span>L</span></div><div class="n">Luo-fe 本地提示词管理器</div><div class="v">版本 1.3</div><div class="ld"><div class="lb"></div></div><div class="t">正在启动...</div></div></body></html>`;
 
@@ -38,18 +38,8 @@ function computeHash(content) {
 }
 
 function createMenu() {
-  const template = [
-    {
-      label: '文件',
-      submenu: [
-        { label: '关于', click: () => { } },
-        { type: 'separator' },
-        { role: 'quit', label: '退出' }
-      ]
-    }
-  ];
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
+  // 无边框窗口不显示菜单栏，跳过菜单创建以加速启动
+  Menu.setApplicationMenu(null);
 }
 
 function resolveIconPath() {
@@ -164,7 +154,8 @@ function createWindow() {
     }
   }
 
-  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+  // 仅对主页面应用 CSP，避免对所有资源请求触发回调
+  mainWindow.webContents.session.webRequest.onHeadersReceived({ urls: ['file://*'] }, (details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
@@ -418,6 +409,11 @@ ipcMain.handle('save-export-file', async (event, defaultName, content) => {
 });
 
 app.setAppUserModelId('com.luofe.prompt-manager');
+
+// 启动性能优化：减少 GPU 进程初始化开销
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err.message);

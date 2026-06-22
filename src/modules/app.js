@@ -384,18 +384,22 @@ async function initApp() {
   let usedCache = false;
 
   try {
-    const dataLoaded = await loadDataFromCache();
-    const settingsLoaded = await loadSettingsFromCache();
-    const translationsLoaded = await loadTranslationsFromCache();
-    const usageLoaded = await loadUsageFromCache();
+    // 并行加载所有缓存数据，减少串行 IPC 往返延迟
+    const [dataLoaded, settingsLoaded, translationsLoaded, usageLoaded] = await Promise.all([
+      loadDataFromCache(),
+      loadSettingsFromCache(),
+      loadTranslationsFromCache(),
+      loadUsageFromCache()
+    ]);
 
     if (dataLoaded && settingsLoaded && translationsLoaded && usageLoaded) {
       usedCache = true;
     } else {
-      loadData();
-      loadTranslations();
-      loadSettings();
-      loadPromptUsage();
+      // 部分缓存缺失时回退到 localStorage
+      if (!dataLoaded) loadData();
+      if (!translationsLoaded) loadTranslations();
+      if (!settingsLoaded) loadSettings();
+      if (!usageLoaded) loadPromptUsage();
     }
   } catch (error) {
     console.error('Cache load failed, falling back to localStorage:', error);
@@ -476,16 +480,30 @@ async function initApp() {
   bindSettingsEventsFromEvents();
   applyBackgroundSettings(elements);
   applyBgClarityMode();
-  renderExamples();
-  initPreviewPanelResize();
-  bindSearchEvents();
-  bindBatchEvents();
-  initSortEvents();
 
-  migrateData();
-  loadBgImageFromFile().then(() => {
-    applyBackgroundSettings(elements);
-  });
+  // 关键路径完成，记录渲染初始化耗时
+  const renderEnd = performance.now();
+  console.log(`[启动] 渲染初始化耗时: ${(renderEnd - cacheEnd).toFixed(1)}ms`);
+
+  // 非关键初始化延迟到空闲时执行，不阻塞首屏交互
+  const deferredInit = () => {
+    renderExamples();
+    initPreviewPanelResize();
+    bindSearchEvents();
+    bindBatchEvents();
+    initSortEvents();
+
+    migrateData();
+    loadBgImageFromFile().then(() => {
+      applyBackgroundSettings(elements);
+    });
+  };
+
+  if (window.requestIdleCallback) {
+    requestIdleCallback(deferredInit, { timeout: 1000 });
+  } else {
+    setTimeout(deferredInit, 50);
+  }
 
   if (elements.rightClickCopyEnabled) {
     elements.rightClickCopyEnabled.checked = appState.settings.rightClickCopyEnabled || false;
