@@ -208,6 +208,7 @@ body {
   -webkit-backdrop-filter: var(--panel-backdrop);
   transition: var(--transition);
   animation: panelSlideLeft 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+  contain: layout paint style;
 }
 
 .category-panel:hover {
@@ -270,6 +271,8 @@ body {
   overflow-y: auto;
   max-height: calc(100vh - 240px);
   padding-right: 0.15rem;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
 }
 
 .category-list::-webkit-scrollbar {
@@ -465,6 +468,7 @@ body {
   transition: var(--transition);
   animation: panelFadeUp 0.45s cubic-bezier(0.4, 0, 0.2, 1) 0.05s both;
   min-width: 0;
+  contain: layout paint style;
 }
 
 .prompt-panel:hover {
@@ -514,6 +518,8 @@ body {
   padding: 0.5rem 0;
   max-height: calc(100vh - 270px);
   align-content: flex-start;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
 }
 
 .prompt-list::-webkit-scrollbar {
@@ -745,6 +751,7 @@ body {
   backdrop-filter: var(--panel-backdrop);
   -webkit-backdrop-filter: var(--panel-backdrop);
   transition: box-shadow var(--transition);
+  contain: layout paint style;
   animation: panelSlideRight 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s both;
   max-height: calc(100vh - 72px);
   overflow-y: auto;
@@ -813,6 +820,8 @@ body {
   transition: border-color var(--transition-fast);
   flex-shrink: 0;
   position: relative;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
 }
 
 .selected-prompts:hover {
@@ -1651,7 +1660,7 @@ body {
   right: 0;
   bottom: 0;
   background-color: #cbd5e1;
-  transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 24px;
 }
 
@@ -1663,7 +1672,7 @@ body {
   left: 3px;
   bottom: 3px;
   background-color: white;
-  transition: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   border-radius: 50%;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
@@ -1932,6 +1941,41 @@ input:checked + .slider:before {
 .cache-actions {
   display: flex;
   gap: 0.5rem;
+}
+
+/* 数据存储位置 */
+.data-directory-info {
+  font-size: 0.82rem;
+}
+
+.data-directory-info .setting-item {
+  align-items: center;
+  background: var(--light-bg);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--border-radius-sm);
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.data-directory-path {
+  font-weight: 600;
+  color: var(--primary-color);
+  word-break: break-all;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.8rem;
+}
+
+.data-directory-mode {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  margin-left: 0.3rem;
+}
+
+.data-directory-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 /* ================================
@@ -2528,6 +2572,7 @@ body.batch-mode .prompt-item {
 .notification-progress {
   height: 3px;
   background: rgba(255, 255, 255, 0.3);
+  transform-origin: left;
   animation: notifProgress 3s linear;
 }
 
@@ -2620,6 +2665,127 @@ body.bg-clarity-mode .category-item {
 
 body.bg-clarity-mode .category-name {
   text-shadow: 0 0 4px rgba(255, 255, 255, 0.9), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* ================================
+   Prompt Image Preview (v1.4)
+   ================================ */
+
+.prompt-image-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 0.7rem;
+  color: var(--primary-color);
+  opacity: 0.7;
+  margin-left: 0.3rem;
+  flex-shrink: 0;
+}
+
+.prompt-item:hover .prompt-image-icon {
+  opacity: 1;
+}
+
+.prompt-image-preview {
+  position: fixed;
+  z-index: 10002;
+  display: none;
+  padding: 6px;
+  background: var(--panel-background, #fff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: var(--border-radius-sm, 6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  animation: previewFadeIn 0.15s ease;
+}
+
+@keyframes previewFadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.prompt-image-preview img {
+  display: block;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+/* 放大查看弹窗（非全屏） */
+.prompt-image-enlarged-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10003;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.prompt-image-enlarged-modal.active {
+  display: flex;
+  animation: enlargedFadeIn 0.2s ease;
+}
+
+@keyframes enlargedFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.prompt-image-enlarged-content {
+  position: relative;
+  max-width: 80vw;
+  max-height: 80vh;
+  padding: 16px;
+  background: var(--panel-background, #fff);
+  border-radius: var(--border-radius, 10px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+  animation: enlargedScaleIn 0.2s ease;
+}
+
+@keyframes enlargedScaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.prompt-image-enlarged-content img {
+  display: block;
+  max-width: calc(80vw - 32px);
+  max-height: calc(80vh - 32px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.prompt-image-enlarged-close {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary-gradient);
+  color: white;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: var(--transition-fast);
+  z-index: 1;
+}
+
+.prompt-image-enlarged-close:hover {
+  transform: scale(1.1) rotate(90deg);
 }
 
 body.bg-clarity-mode .category-panel,
@@ -2895,8 +3061,8 @@ body.bg-clarity-mode .search-input-wrapper {
 }
 
 @keyframes notifProgress {
-  from { width: 100%; }
-  to { width: 0%; }
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
 }
 
 /* ================================
@@ -3041,4 +3207,29 @@ body.bg-clarity-mode .search-input-wrapper {
 #export-shortcut-input:focus {
   border-color: var(--primary-color);
   box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+/* ================================
+   Performance Optimizations
+   ================================ */
+
+/* 滚动容器优化：防止滚动链传播 */
+.category-list,
+.prompt-list,
+.selected-prompts,
+.modal-body,
+.custom-category-list,
+.category-prompts-list,
+.batch-move-list,
+.search-results-dropdown,
+.category-checkboxes {
+  overscroll-behavior: contain;
+}
+
+/* 高频动画元素提升为合成层 */
+.notification,
+.modal-content,
+.prompt-image-preview,
+.prompt-image-enlarged-content {
+  will-change: transform, opacity;
 }

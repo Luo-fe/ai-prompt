@@ -2,8 +2,12 @@ node_modules/
 dist/
 dist2/
 dist3/
+dist_new/
+dist_new2/
+dist_new3/
 应用程序/
 *.exe
 *.blockmap
 data/
 *.ps1
+debug_app.js

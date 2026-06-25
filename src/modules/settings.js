@@ -45,9 +45,13 @@ export function openSettingsModal(elements) {
   loadRightClickCopySettings(elements);
   if (elements.exportShortcutInput) elements.exportShortcutInput.value = appState.settings.exportShortcut || 'Ctrl+Shift+E';
   if (elements.exportShortcutTarget) elements.exportShortcutTarget.value = appState.settings.exportShortcutTarget || 'clipboard';
+  if (elements.previewImageLimitEnabled) elements.previewImageLimitEnabled.checked = (appState.settings.previewImage || {}).limitEnabled !== false;
+  if (elements.previewImageMaxDimension) elements.previewImageMaxDimension.value = (appState.settings.previewImage || {}).maxDimension || 200;
+  if (elements.previewImageDisplaySize) elements.previewImageDisplaySize.value = (appState.settings.previewImage || {}).displaySize || 220;
   updateBgPreview(elements);
   elements.settingsModal.style.display = 'block';
   refreshCacheInfo();
+  loadDataDirectoryInfo(elements);
 }
 
 function loadRightClickCopySettings(elements) {
@@ -138,6 +142,15 @@ export function saveSettings(elements) {
   if (elements.exportShortcutTarget) {
     appState.settings.exportShortcutTarget = elements.exportShortcutTarget.value;
   }
+  if (elements.previewImageLimitEnabled || elements.previewImageMaxDimension || elements.previewImageDisplaySize) {
+    const maxDim = elements.previewImageMaxDimension ? parseInt(elements.previewImageMaxDimension.value) : 200;
+    const dispSize = elements.previewImageDisplaySize ? parseInt(elements.previewImageDisplaySize.value) : 220;
+    appState.settings.previewImage = {
+      limitEnabled: elements.previewImageLimitEnabled ? elements.previewImageLimitEnabled.checked : true,
+      maxDimension: (maxDim >= 50 && maxDim <= 500) ? maxDim : 200,
+      displaySize: (dispSize >= 100 && dispSize <= 500) ? dispSize : 220
+    };
+  }
   saveSettingsToStorage();
   _applyBackgroundSettings();
   elements.settingsModal.style.display = 'none';
@@ -172,11 +185,6 @@ export function handleBgImageUpload(event) {
       appState.settings.backgroundImage = base64Data;
     }
     saveSettingsToStorage();
-    try {
-      localStorage.setItem('aiPromptToolBgCache', appState.bgImageData || '');
-    } catch (e) {
-      console.warn('bgCache save failed:', e);
-    }
     _applyBackgroundSettings(_getElements());
     _showNotification('背景图片已设置', 'success');
   };
@@ -191,11 +199,6 @@ export function clearBgImage(elements) {
     window.electronAPI.deleteBgImage();
   }
   saveSettingsToStorage();
-  try {
-    localStorage.removeItem('aiPromptToolBgCache');
-  } catch (e) {
-    console.warn('bgCache clear failed:', e);
-  }
   _applyBackgroundSettings(_getElements());
   updateBgPreview(elements);
   _showNotification('背景图片已清除', 'success');
@@ -208,11 +211,6 @@ export async function loadBgImageFromFile() {
     const result = await window.electronAPI.readBgImage();
     if (result.success) {
       appState.bgImageData = result.data;
-      try {
-        localStorage.setItem('aiPromptToolBgCache', result.data);
-      } catch (e) {
-        console.warn('bgCache save failed:', e);
-      }
     } else {
       appState.settings.backgroundImage = '';
       appState.bgImageData = null;
@@ -308,7 +306,20 @@ export function bindSettingsEvents(elements) {
       _showNotification('没有发现重复的提示词', 'info');
     }
   });
-  elements.exportAllDataBtn.addEventListener('click', () => {
+  elements.exportAllDataBtn.addEventListener('click', async () => {
+    const promptImages = {};
+    if (window.electronAPI && window.electronAPI.readPromptImage) {
+      for (const category of appState.categories) {
+        for (const prompt of category.prompts) {
+          if (typeof prompt === 'object' && prompt !== null && prompt.imagePath) {
+            try {
+              const result = await window.electronAPI.readPromptImage(prompt.imagePath);
+              if (result.success) promptImages[prompt.imagePath] = result.data;
+            } catch (e) {}
+          }
+        }
+      }
+    }
     const data = {
       categories: appState.categories,
       settings: appState.settings,
@@ -317,6 +328,7 @@ export function bindSettingsEvents(elements) {
       selectedPrompts: appState.selectedPrompts,
       nextCategoryId: appState.nextCategoryId,
       bgImageData: appState.bgImageData || null,
+      promptImages: Object.keys(promptImages).length > 0 ? promptImages : null,
       exportDate: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -371,6 +383,14 @@ export function bindSettingsEvents(elements) {
           appState.nextCategoryId = data.nextCategoryId;
         }
         if (data.bgImageData) appState.bgImageData = data.bgImageData;
+
+        if (data.promptImages && window.electronAPI && window.electronAPI.savePromptImage) {
+          for (const [filename, base64Data] of Object.entries(data.promptImages)) {
+            try {
+              await window.electronAPI.savePromptImage(filename, base64Data);
+            } catch (e) {}
+          }
+        }
 
         _saveData();
         saveSettingsToStorage();
@@ -583,6 +603,157 @@ export function bindSettingsEvents(elements) {
       }
     });
   }
+  if (elements.openPromptImagesFolderBtn) {
+    elements.openPromptImagesFolderBtn.addEventListener('click', async () => {
+      if (window.electronAPI && window.electronAPI.openPromptImagesFolder) {
+        const result = await window.electronAPI.openPromptImagesFolder();
+        if (!result.success) {
+          _showNotification('打开文件夹失败: ' + (result.error || ''), 'error');
+        }
+      } else {
+        _showNotification('当前环境不支持此功能', 'warning');
+      }
+    });
+  }
+
+  // 数据存储位置管理
+  if (elements.changeDataDirectoryBtn) {
+    elements.changeDataDirectoryBtn.addEventListener('click', handleChangeDataDirectory);
+  }
+  if (elements.openDataDirectoryBtn) {
+    elements.openDataDirectoryBtn.addEventListener('click', handleOpenDataDirectory);
+  }
+  if (elements.resetDataDirectoryBtn) {
+    elements.resetDataDirectoryBtn.addEventListener('click', handleResetDataDirectory);
+  }
+}
+
+async function loadDataDirectoryInfo(elements) {
+  if (!window.electronAPI || !window.electronAPI.getDataDirectory) return;
+  if (!elements.dataDirectoryPath) return;
+
+  try {
+    const result = await window.electronAPI.getDataDirectory();
+    if (!result.success) {
+      elements.dataDirectoryPath.textContent = '获取失败';
+      return;
+    }
+
+    elements.dataDirectoryPath.textContent = result.currentPath;
+
+    if (elements.dataDirectoryMode) {
+      let modeText = '';
+      if (result.isPortable) {
+        modeText = '（便携模式）';
+        if (elements.changeDataDirectoryBtn) elements.changeDataDirectoryBtn.style.display = 'none';
+        if (elements.resetDataDirectoryBtn) elements.resetDataDirectoryBtn.style.display = 'none';
+      } else if (result.isCustom) {
+        modeText = '（自定义位置）';
+        if (elements.changeDataDirectoryBtn) elements.changeDataDirectoryBtn.style.display = '';
+        if (elements.resetDataDirectoryBtn) elements.resetDataDirectoryBtn.style.display = '';
+      } else {
+        modeText = '（安装目录默认）';
+        if (elements.changeDataDirectoryBtn) elements.changeDataDirectoryBtn.style.display = '';
+        if (elements.resetDataDirectoryBtn) elements.resetDataDirectoryBtn.style.display = 'none';
+      }
+      elements.dataDirectoryMode.textContent = modeText;
+    }
+  } catch (e) {
+    elements.dataDirectoryPath.textContent = '获取失败';
+  }
+}
+
+async function handleChangeDataDirectory() {
+  if (!window.electronAPI || !window.electronAPI.chooseDataDirectory) {
+    _showNotification('当前环境不支持此功能', 'warning');
+    return;
+  }
+
+  const confirmed = await _showConfirm(
+    '更改数据存储位置',
+    '将更改所有用户数据（分类、提示词、背景图、预览图、设置等）的存储位置。\n\n现有数据将自动迁移到新位置。此操作完成后应用将重启。\n\n是否继续？',
+    '📁'
+  );
+  if (!confirmed) return;
+
+  const chooseResult = await window.electronAPI.chooseDataDirectory();
+  if (!chooseResult.success) {
+    if (!chooseResult.canceled) {
+      _showNotification('选择文件夹失败: ' + (chooseResult.error || ''), 'error');
+    }
+    return;
+  }
+
+  const selectedPath = chooseResult.path;
+  // 在选定位置创建子目录
+  const newDataPath = selectedPath + '\\Luo-fe提示词管理器';
+
+  const confirmMigrate = await _showConfirm(
+    '确认移动数据',
+    `新位置: ${newDataPath}\n\n所有数据将从原位置移动到新位置，原位置的数据将被删除。\n\n点击确认开始移动并重启应用。`,
+    '📦'
+  );
+  if (!confirmMigrate) return;
+
+  _showNotification('正在移动数据，请稍候...', 'info');
+
+  const setResult = await window.electronAPI.setDataDirectory(newDataPath);
+  if (!setResult.success) {
+    _showNotification('移动失败: ' + (setResult.error || ''), 'error');
+    return;
+  }
+
+  let msg = `移动完成（${setResult.migrated} 项），应用将重启...`;
+  if (setResult.failedToDelete > 0) {
+    msg = `移动完成（${setResult.migrated} 项，${setResult.failedToDelete} 项原文件未能删除，可手动清理），应用将重启...`;
+  }
+  _showNotification(msg, 'success');
+
+  // 延迟一下让用户看到通知，然后重启
+  setTimeout(async () => {
+    if (window.electronAPI && window.electronAPI.relaunchApp) {
+      await window.electronAPI.relaunchApp();
+    }
+  }, 1500);
+}
+
+async function handleOpenDataDirectory() {
+  if (!window.electronAPI || !window.electronAPI.openDataDirectory) {
+    _showNotification('当前环境不支持此功能', 'warning');
+    return;
+  }
+
+  const result = await window.electronAPI.openDataDirectory();
+  if (!result.success) {
+    _showNotification('打开文件夹失败: ' + (result.error || ''), 'error');
+  }
+}
+
+async function handleResetDataDirectory() {
+  if (!window.electronAPI || !window.electronAPI.resetDataDirectory) {
+    _showNotification('当前环境不支持此功能', 'warning');
+    return;
+  }
+
+  const confirmed = await _showConfirm(
+    '恢复默认数据位置',
+    '将恢复使用系统默认位置（C 盘）存储数据。\n\n现有自定义位置的数据不会被删除，但应用将不再使用它们。\n\n应用将重启以应用更改。是否继续？',
+    '🔄'
+  );
+  if (!confirmed) return;
+
+  const result = await window.electronAPI.resetDataDirectory();
+  if (!result.success) {
+    _showNotification('恢复失败: ' + (result.error || ''), 'error');
+    return;
+  }
+
+  _showNotification('已恢复默认位置，应用将重启...', 'success');
+  setTimeout(async () => {
+    if (window.electronAPI && window.electronAPI.relaunchApp) {
+      await window.electronAPI.relaunchApp();
+    }
+  }, 1500);
 }
 
 async function refreshCacheInfo() {

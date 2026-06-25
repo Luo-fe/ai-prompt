@@ -27,21 +27,8 @@ export function debounce(func, wait) {
   };
 }
 
-export function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-export function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+export function sanitizeFilename(s, maxLen = 80) {
+  return String(s).replace(/[\\/:*?"<>|]/g, '_').trim().substring(0, maxLen);
 }
 
 export function iterateBatchSelected(batchSelected, callback) {

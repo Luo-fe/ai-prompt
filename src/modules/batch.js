@@ -1,5 +1,5 @@
 import { appState } from './state.js';
-import { getPromptText, getPromptTranslation, getCategoryById, findPromptIndex, iterateBatchSelected, createPromptKey } from './utils.js';
+import { getPromptText, getPromptTranslation, getCategoryById, findPromptIndex, iterateBatchSelected } from './utils.js';
 
 let _showConfirm = async () => false;
 let _showInput = async () => null;
@@ -66,7 +66,12 @@ export async function batchDeletePrompts() {
     if (category) {
       const idx = findPromptIndex(category.prompts, text);
       if (idx !== -1) {
-        category.prompts.splice(idx, 1);
+        const removed = category.prompts.splice(idx, 1)[0];
+        if (typeof removed === 'object' && removed !== null && removed.imagePath) {
+          if (window.electronAPI && window.electronAPI.deletePromptImage) {
+            window.electronAPI.deletePromptImage(removed.imagePath);
+          }
+        }
       }
     }
     const selectedArr = appState.selectedPrompts[categoryId];
@@ -125,7 +130,11 @@ export function performBatchMove(targetCategoryId) {
       const idx = findPromptIndex(sourceCategory.prompts, text);
       if (idx !== -1) {
         const prompt = sourceCategory.prompts.splice(idx, 1)[0];
-        targetCategory.prompts.push({ text: getPromptText(prompt), translation: getPromptTranslation(prompt) });
+        const newPrompt = { text: getPromptText(prompt), translation: getPromptTranslation(prompt) };
+        if (typeof prompt === 'object' && prompt !== null && prompt.imagePath) {
+          newPrompt.imagePath = prompt.imagePath;
+        }
+        targetCategory.prompts.push(newPrompt);
         targetTexts.add(getPromptText(prompt).toLowerCase());
       }
     }

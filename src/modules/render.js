@@ -1,5 +1,5 @@
 import { appState, saveDataImmediate } from './state.js';
-import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, findPromptIndex, createPromptKey } from './utils.js';
+import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, createPromptKey, sanitizeFilename } from './utils.js';
 import { EXAMPLES, NOTIFICATION_DURATION, NOTIFICATION_MAX_COUNT } from './constants.js';
 
 let handlers = {};
@@ -117,6 +117,21 @@ export function cacheElements() {
   elements.exportShortcutInput = document.getElementById('export-shortcut-input');
   elements.exportShortcutResetBtn = document.getElementById('export-shortcut-reset-btn');
   elements.exportShortcutTarget = document.getElementById('export-shortcut-target');
+  elements.previewImageLimitEnabled = document.getElementById('preview-image-limit-enabled');
+  elements.previewImageMaxDimension = document.getElementById('preview-image-max-dimension');
+  elements.previewImageDisplaySize = document.getElementById('preview-image-display-size');
+  elements.promptImageFileInput = document.getElementById('prompt-image-file-input');
+  elements.promptImagePreview = document.getElementById('prompt-image-preview');
+  elements.promptImagePreviewImg = document.getElementById('prompt-image-preview-img');
+  elements.promptImageEnlargedModal = document.getElementById('prompt-image-enlarged-modal');
+  elements.promptImageEnlargedImg = document.getElementById('prompt-image-enlarged-img');
+  elements.promptImageEnlargedClose = document.getElementById('prompt-image-enlarged-close');
+  elements.openPromptImagesFolderBtn = document.getElementById('open-prompt-images-folder-btn');
+  elements.dataDirectoryPath = document.getElementById('data-directory-path');
+  elements.dataDirectoryMode = document.getElementById('data-directory-mode');
+  elements.changeDataDirectoryBtn = document.getElementById('change-data-directory-btn');
+  elements.openDataDirectoryBtn = document.getElementById('open-data-directory-btn');
+  elements.resetDataDirectoryBtn = document.getElementById('reset-data-directory-btn');
 }
 
 export function renderCategoryList() {
@@ -307,11 +322,20 @@ export function renderPromptList(categoryId) {
       textContainer.appendChild(createTranslationUI(category.id, prompt));
     }
 
+    const hasImage = typeof prompt === 'object' && prompt !== null && prompt.imagePath;
+    if (hasImage) {
+      const imgIcon = document.createElement('span');
+      imgIcon.className = 'prompt-image-icon';
+      imgIcon.innerHTML = '<i class="fa fa-camera"></i>';
+      imgIcon.title = '已设置预览图';
+      textContainer.appendChild(imgIcon);
+    }
+
     item.appendChild(cb);
     item.appendChild(batchCb);
     item.appendChild(textContainer);
     item.addEventListener('click', e => {
-      if (e.target !== cb && !e.target.closest('.editable-translation') && !e.target.closest('.inline-translate-btn') && !e.target.closest('.translation-edit-input') && !e.target.closest('.batch-checkbox')) {
+      if (e.target !== cb && !e.target.closest('.editable-translation') && !e.target.closest('.inline-translate-btn') && !e.target.closest('.translation-edit-input') && !e.target.closest('.batch-checkbox') && !e.target.closest('.prompt-image-icon')) {
         cb.checked = !cb.checked;
         handlePromptToggle(category.id, prompt);
       }
@@ -324,6 +348,15 @@ export function renderPromptList(categoryId) {
           .then(() => showNotification(`已复制: ${text.length > 30 ? text.substring(0, 30) + '...' : text}`, 'success'))
           .catch(() => showNotification('复制失败', 'error'));
       });
+    } else {
+      item.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        _hideHoverPreview();
+        showPromptContextMenu(category.id, prompt, e.clientX, e.clientY);
+      });
+    }
+    if (hasImage) {
+      attachHoverPreview(item, prompt);
     }
     frag.appendChild(item);
   });
@@ -848,6 +881,13 @@ export async function categoryBatchDelete() {
   }
   if (!confirmed) return;
 
+  if (window.electronAPI && window.electronAPI.deleteCategoryImages) {
+    for (const id of ids) {
+      const cat = getCategoryById(appState.categories, id);
+      try { await window.electronAPI.deleteCategoryImages(cat ? cat.name : id); } catch (e) {}
+    }
+  }
+
   for (const id of ids) {
     delete appState.selectedPrompts[id];
   }
@@ -887,4 +927,339 @@ export function buildRightClickCopyText(prompt) {
   if (parts.length === 0) return original;
   if (parts.length === 1) return parts[0];
   return parts.join(config.connector);
+}
+
+// ================================
+// Prompt Image Preview Feature
+// ================================
+
+let _promptImageEditTarget = null;
+let _hoverPreviewTimer = null;
+// LRU 图片缓存，限制最大 20 条（每条 50-200KB base64），避免内存无限增长
+const _IMAGE_CACHE_MAX = 20;
+const _imageCache = new Map();
+
+function _cacheImage(key, value) {
+  if (_imageCache.size >= _IMAGE_CACHE_MAX) {
+    // 删除最旧条目（Map 保持插入顺序，第一个即最旧）
+    const oldestKey = _imageCache.keys().next().value;
+    _imageCache.delete(oldestKey);
+  }
+  _imageCache.set(key, value);
+}
+
+function _getCachedImage(key) {
+  if (!_imageCache.has(key)) return null;
+  // LRU：移动到末尾（最近使用）
+  const value = _imageCache.get(key);
+  _imageCache.delete(key);
+  _imageCache.set(key, value);
+  return value;
+}
+
+function _closePromptContextMenu() {
+  const existing = document.querySelector('.prompt-context-menu');
+  if (existing) existing.remove();
+}
+
+export function showPromptContextMenu(categoryId, prompt, x, y) {
+  _closePromptContextMenu();
+  const hasImage = typeof prompt === 'object' && prompt !== null && prompt.imagePath;
+  const menu = document.createElement('div');
+  menu.className = 'prompt-context-menu';
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+
+  const addOrReplace = document.createElement('div');
+  addOrReplace.className = 'context-menu-item primary';
+  addOrReplace.innerHTML = `<i class="fa fa-camera"></i> ${hasImage ? '更换预览图' : '添加预览图'}`;
+  addOrReplace.addEventListener('click', () => {
+    _closePromptContextMenu();
+    _promptImageEditTarget = { categoryId, prompt };
+    if (elements.promptImageFileInput) {
+      elements.promptImageFileInput.value = '';
+      elements.promptImageFileInput.click();
+    }
+  });
+  menu.appendChild(addOrReplace);
+
+  if (hasImage) {
+    const enlargeItem = document.createElement('div');
+    enlargeItem.className = 'context-menu-item';
+    enlargeItem.innerHTML = '<i class="fa fa-search-plus"></i> 放大看看';
+    enlargeItem.addEventListener('click', () => {
+      _closePromptContextMenu();
+      _showEnlargedPreview(prompt);
+    });
+    menu.appendChild(enlargeItem);
+
+    const deleteItem = document.createElement('div');
+    deleteItem.className = 'context-menu-item';
+    deleteItem.innerHTML = '<i class="fa fa-trash"></i> 删除预览图';
+    deleteItem.addEventListener('click', () => {
+      _closePromptContextMenu();
+      handleDeletePromptImage(categoryId, prompt);
+    });
+    menu.appendChild(deleteItem);
+  }
+
+  document.body.appendChild(menu);
+  setTimeout(() => {
+    document.addEventListener('click', _closePromptContextMenuOnce, { once: true });
+  }, 0);
+}
+
+function _closePromptContextMenuOnce() {
+  _closePromptContextMenu();
+}
+
+export async function handleDeletePromptImage(categoryId, prompt) {
+  if (!prompt.imagePath) return;
+  const confirmed = await showConfirmDialog('删除预览图', '确定要删除此提示词的预览图吗？', '⚠️');
+  if (!confirmed) return;
+  if (window.electronAPI && window.electronAPI.deletePromptImage) {
+    await window.electronAPI.deletePromptImage(prompt.imagePath);
+  }
+  _imageCache.delete(prompt.imagePath);
+  prompt.imagePath = '';
+  handlers.saveData();
+  renderPromptList(categoryId);
+  showNotification('预览图已删除', 'success');
+}
+
+
+async function _computeImageFilename(categoryName, text) {
+  const cat = sanitizeFilename(categoryName) || 'category';
+  const prompt = sanitizeFilename(text) || 'prompt';
+  return `${cat}_${prompt}.jpg`;
+}
+
+async function _compressImageWithCanvas(base64Data, maxDimension) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (maxDimension && (width > maxDimension || height > maxDimension)) {
+        if (width >= height) {
+          height = Math.round(height * maxDimension / width);
+          width = maxDimension;
+        } else {
+          width = Math.round(width * maxDimension / height);
+          height = maxDimension;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => reject(new Error('Image load failed'));
+    img.src = base64Data;
+  });
+}
+
+export async function handlePromptImageFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file || !_promptImageEditTarget) return;
+  const { categoryId, prompt } = _promptImageEditTarget;
+  _promptImageEditTarget = null;
+
+  if (!file.type.startsWith('image/')) {
+    showNotification('请选择图片文件', 'error');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      let base64Data = e.target.result;
+      const config = appState.settings.previewImage || { limitEnabled: true, maxDimension: 200 };
+      if (config.limitEnabled !== false) {
+        base64Data = await _compressImageWithCanvas(base64Data, config.maxDimension || 200);
+      }
+      const category = getCategoryById(appState.categories, categoryId);
+      const categoryName = category ? category.name : categoryId;
+      const filename = await _computeImageFilename(categoryName, getPromptText(prompt));
+      if (window.electronAPI && window.electronAPI.savePromptImage) {
+        const result = await window.electronAPI.savePromptImage(filename, base64Data);
+        if (!result.success) {
+          showNotification('图片保存失败: ' + (result.error || ''), 'error');
+          return;
+        }
+        if (prompt.imagePath && prompt.imagePath !== result.filename) {
+          await window.electronAPI.deletePromptImage(prompt.imagePath);
+          _imageCache.delete(prompt.imagePath);
+        }
+        prompt.imagePath = result.filename;
+      } else {
+        prompt.imagePath = filename;
+      }
+      _cacheImage(prompt.imagePath, base64Data);
+      handlers.saveData();
+      renderPromptList(categoryId);
+      showNotification('预览图已设置', 'success');
+    } catch (err) {
+      showNotification('图片处理失败: ' + err.message, 'error');
+    }
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+export function attachHoverPreview(item, prompt) {
+  let hoverTimer = null;
+  let hoverRafId = null;
+  // 持续跟踪最新鼠标位置，确保 300ms 延迟后显示预览图时使用最新位置
+  let lastMouseX = 0;
+  let lastMouseY = 0;
+
+  item.addEventListener('mouseenter', (e) => {
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    hoverTimer = setTimeout(() => _showHoverPreview(prompt, lastMouseX, lastMouseY), 300);
+  });
+  item.addEventListener('mouseleave', () => {
+    if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+    _hideHoverPreview();
+  });
+  item.addEventListener('mousemove', (e) => {
+    // 始终更新最新鼠标位置（即使预览图未显示）
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    if (!elements.promptImagePreview || elements.promptImagePreview.style.display !== 'block') return;
+    if (hoverRafId) return;
+    hoverRafId = requestAnimationFrame(() => {
+      hoverRafId = null;
+      _positionHoverPreview(lastMouseX, lastMouseY);
+    });
+  });
+}
+
+async function _showHoverPreview(prompt, x, y) {
+  if (!prompt.imagePath || !elements.promptImagePreview) return;
+  const preview = elements.promptImagePreview;
+  const img = elements.promptImagePreviewImg;
+  const config = appState.settings.previewImage || {};
+  const displaySize = (config.displaySize && config.displaySize >= 100 && config.displaySize <= 500) ? config.displaySize : 220;
+  preview.style.maxWidth = displaySize + 'px';
+  preview.style.maxHeight = displaySize + 'px';
+  img.style.maxHeight = (displaySize - 12) + 'px';
+
+  // 使用传入的最新鼠标位置定位
+  _positionHoverPreview(x, y, displaySize);
+  preview.style.display = 'block';
+
+  const cached = _getCachedImage(prompt.imagePath);
+  if (cached) {
+    img.src = cached;
+    return;
+  }
+
+  img.src = '';
+  if (window.electronAPI && window.electronAPI.readPromptImage) {
+    try {
+      const result = await window.electronAPI.readPromptImage(prompt.imagePath);
+      if (result.success) {
+        img.src = result.data;
+        _cacheImage(prompt.imagePath, result.data);
+      } else {
+        img.alt = '图片不存在';
+        preview.style.display = 'none';
+        showNotification('预览图文件不存在', 'warning');
+      }
+    } catch (err) {
+      preview.style.display = 'none';
+    }
+  }
+}
+
+function _positionHoverPreview(x, y, displaySize) {
+  const preview = elements.promptImagePreview;
+  if (!preview) return;
+  const offset = 16;
+  const previewWidth = displaySize || 220;
+  const previewHeight = displaySize || 220;
+  let left = x + offset;
+  let top = y + offset;
+  if (left + previewWidth > window.innerWidth) left = x - previewWidth - offset;
+  if (top + previewHeight > window.innerHeight) top = y - previewHeight - offset;
+  preview.style.left = left + 'px';
+  preview.style.top = top + 'px';
+}
+
+function _hideHoverPreview() {
+  if (elements.promptImagePreview) {
+    elements.promptImagePreview.style.display = 'none';
+  }
+}
+
+async function _showEnlargedPreview(prompt) {
+  if (!prompt.imagePath || !elements.promptImageEnlargedModal) return;
+  const modal = elements.promptImageEnlargedModal;
+  const img = elements.promptImageEnlargedImg;
+  const config = appState.settings.previewImage || {};
+  const displaySize = (config.displaySize && config.displaySize >= 100 && config.displaySize <= 500) ? config.displaySize : 220;
+  const enlargedSize = Math.min(displaySize * 2, Math.floor(window.innerWidth * 0.8), Math.floor(window.innerHeight * 0.8));
+  const content = modal.querySelector('.prompt-image-enlarged-content');
+  if (content) {
+    content.style.maxWidth = enlargedSize + 'px';
+    content.style.maxHeight = enlargedSize + 'px';
+  }
+  img.style.maxWidth = (enlargedSize - 32) + 'px';
+  img.style.maxHeight = (enlargedSize - 32) + 'px';
+  img.src = '';
+
+  const cachedEnlarged = _getCachedImage(prompt.imagePath);
+  if (cachedEnlarged) {
+    img.src = cachedEnlarged;
+    modal.classList.add('active');
+    return;
+  }
+
+  if (window.electronAPI && window.electronAPI.readPromptImage) {
+    try {
+      const result = await window.electronAPI.readPromptImage(prompt.imagePath);
+      if (result.success) {
+        img.src = result.data;
+        _cacheImage(prompt.imagePath, result.data);
+        modal.classList.add('active');
+      } else {
+        showNotification('预览图文件不存在', 'warning');
+      }
+    } catch (err) {
+      showNotification('预览图读取失败', 'error');
+    }
+  }
+}
+
+function _hideEnlargedPreview() {
+  if (elements.promptImageEnlargedModal) {
+    elements.promptImageEnlargedModal.classList.remove('active');
+  }
+}
+
+export function initPromptImageUpload() {
+  if (elements.promptImageFileInput) {
+    elements.promptImageFileInput.addEventListener('change', handlePromptImageFileSelect);
+  }
+  document.addEventListener('click', () => {
+    if (elements.promptImagePreview) {
+      elements.promptImagePreview.style.display = 'none';
+    }
+  }, true);
+  if (elements.promptImageEnlargedClose) {
+    elements.promptImageEnlargedClose.addEventListener('click', _hideEnlargedPreview);
+  }
+  if (elements.promptImageEnlargedModal) {
+    elements.promptImageEnlargedModal.addEventListener('click', (e) => {
+      if (e.target === elements.promptImageEnlargedModal) _hideEnlargedPreview();
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && elements.promptImageEnlargedModal && elements.promptImageEnlargedModal.classList.contains('active')) {
+      _hideEnlargedPreview();
+    }
+  });
 }

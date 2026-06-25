@@ -1,5 +1,5 @@
-import { appState, saveData, saveDataImmediate, saveSettingsToStorage, saveTranslations, recordPromptUsage } from './state.js';
-import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, findPromptIndex, iterateBatchSelected, createPromptKey } from './utils.js';
+import { appState, saveData } from './state.js';
+import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, sanitizeFilename } from './utils.js';
 
 let _translateText = async () => '';
 let _showConfirm = async () => false;
@@ -100,6 +100,10 @@ export async function editCategory(categoryId) {
 export async function deleteCategory(categoryId) {
   const confirmed = await _showConfirm('删除分类', '确定要删除此分类及其所有提示词吗？', '⚠️');
   if (!confirmed) return;
+  const category = getCategoryById(appState.categories, categoryId);
+  if (window.electronAPI && window.electronAPI.deleteCategoryImages) {
+    try { await window.electronAPI.deleteCategoryImages(category ? category.name : categoryId); } catch (e) {}
+  }
   delete appState.selectedPrompts[categoryId];
   appState.categories = appState.categories.filter(cat => cat.id !== categoryId);
   if (appState.selectedCategoryId === categoryId) {
@@ -122,6 +126,12 @@ export async function batchDeleteCategories(categoryIds) {
   }
   const confirmed = await _showConfirm('批量删除分类', `确定要删除选中的 ${categoryIds.length} 个分类及其所有提示词吗？`, '⚠️');
   if (!confirmed) return;
+  if (window.electronAPI && window.electronAPI.deleteCategoryImages) {
+    for (const id of categoryIds) {
+      const cat = getCategoryById(appState.categories, id);
+      try { await window.electronAPI.deleteCategoryImages(cat ? cat.name : id); } catch (e) {}
+    }
+  }
   for (const id of categoryIds) {
     delete appState.selectedPrompts[id];
   }
@@ -208,12 +218,25 @@ export async function editPrompt(categoryId, index) {
   try {
     translation = await _translateText(trimmed);
   } catch (e) {}
-  category.prompts[index] = { text: trimmed, translation };
+  const oldImagePath = (typeof prompt === 'object' && prompt !== null) ? prompt.imagePath : '';
+  const updatedPrompt = { text: trimmed, translation };
+  if (oldImagePath) {
+    updatedPrompt.imagePath = oldImagePath;
+    if (window.electronAPI && window.electronAPI.renamePromptImage) {
+      try {
+        const catName = category.name || categoryId;
+        const newFilename = `${sanitizeFilename(catName) || 'category'}_${sanitizeFilename(trimmed) || 'prompt'}.jpg`;
+        const result = await window.electronAPI.renamePromptImage(oldImagePath, newFilename);
+        if (result.success) updatedPrompt.imagePath = result.filename;
+      } catch (e) {}
+    }
+  }
+  category.prompts[index] = updatedPrompt;
   const selectedArr = appState.selectedPrompts[categoryId];
   if (selectedArr) {
     const selIdx = selectedArr.findIndex(p => getPromptText(p) === currentText);
     if (selIdx !== -1) {
-      selectedArr[selIdx] = { text: trimmed, translation };
+      selectedArr[selIdx] = { text: trimmed, translation, imagePath: updatedPrompt.imagePath || '' };
     }
   }
   saveData();
@@ -230,6 +253,11 @@ export async function deletePrompt(categoryId, index) {
   if (!confirmed) return;
   const removed = category.prompts.splice(index, 1)[0];
   const removedText = getPromptText(removed);
+  if (typeof removed === 'object' && removed !== null && removed.imagePath) {
+    if (window.electronAPI && window.electronAPI.deletePromptImage) {
+      try { await window.electronAPI.deletePromptImage(removed.imagePath); } catch (e) {}
+    }
+  }
   const selectedArr = appState.selectedPrompts[categoryId];
   if (selectedArr) {
     const selIdx = selectedArr.findIndex(p => getPromptText(p) === removedText);

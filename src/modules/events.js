@@ -240,13 +240,38 @@ export function initPreviewPanelResize() {
   const promptsBox = document.getElementById('selected-prompts');
 
   function createResizeHandler(handle, target, direction, minSize, maxSize) {
-    let isResizing = false;
     let startPos = 0;
     let startSize = 0;
     const isHorizontal = direction === 'horizontal';
+    let rafId = null;
+    let lastEvent = null;
+
+    function onMouseMove(e) {
+      lastEvent = e;
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (!lastEvent) return;
+        const diff = (isHorizontal ? lastEvent.clientX : lastEvent.clientY) - startPos;
+        const newSize = Math.min(Math.max(startSize + diff, minSize), maxSize);
+        if (isHorizontal) target.style.width = newSize + 'px';
+        else target.style.height = newSize + 'px';
+      });
+    }
+
+    function onMouseUp() {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      handle.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    }
 
     handle.addEventListener('mousedown', (e) => {
-      isResizing = true;
       startPos = isHorizontal ? e.clientX : e.clientY;
       startSize = isHorizontal ? target.offsetWidth : target.offsetHeight;
       handle.classList.add('active');
@@ -254,22 +279,8 @@ export function initPreviewPanelResize() {
       document.body.style.userSelect = 'none';
       e.preventDefault();
       e.stopPropagation();
-    });
-
-    document.addEventListener('mousemove', (e) => {
-      if (!isResizing) return;
-      const diff = (isHorizontal ? e.clientX : e.clientY) - startPos;
-      const newSize = Math.min(Math.max(startSize + diff, minSize), maxSize);
-      if (isHorizontal) target.style.width = newSize + 'px';
-      else target.style.height = newSize + 'px';
-    });
-
-    document.addEventListener('mouseup', () => {
-      if (!isResizing) return;
-      isResizing = false;
-      handle.classList.remove('active');
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
     });
   }
 

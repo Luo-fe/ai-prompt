@@ -1,12 +1,12 @@
-import { appState, loadData, loadDataFromCache, saveData, saveDataImmediate, loadSettings, loadSettingsFromCache, saveSettingsToStorage, loadTranslations, loadTranslationsFromCache, saveTranslations, loadPromptUsage, loadUsageFromCache, savePromptUsage, recordPromptUsage, getFrequentPrompts, setNotificationHandler } from './state.js';
+import { appState, loadData, loadDataFromCache, saveData, loadSettings, loadSettingsFromCache, saveSettingsToStorage, loadTranslations, loadTranslationsFromCache, loadPromptUsage, loadUsageFromCache, savePromptUsage, recordPromptUsage, getFrequentPrompts, setNotificationHandler } from './state.js';
 import { DEFAULT_CATEGORIES, EXAMPLES, DATA_VERSION } from './constants.js';
-import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, findPromptIndex, debounce } from './utils.js';
-import { addCategory, addCategories, editCategory, deleteCategory, batchDeleteCategories, moveCategoryUp, moveCategoryDown, addPrompt, editPrompt, deletePrompt, batchImportPrompts, togglePrompt, selectAllPrompts, deselectAllPrompts, clearAllSelectedPrompts, isPromptSelected, isPromptSelectedByText, updatePromptTranslation, syncSelectedPromptsTranslations, cleanDuplicatePrompts, setDialogHandlers as setDataDialogHandlers } from './data.js';
+import { getPromptText, getPromptTranslation, getCategoryById } from './utils.js';
+import { addCategory, addCategories, editCategory, deleteCategory, batchDeleteCategories, moveCategoryUp, moveCategoryDown, addPrompt, editPrompt, deletePrompt, batchImportPrompts, togglePrompt, selectAllPrompts, deselectAllPrompts, clearAllSelectedPrompts, isPromptSelected, updatePromptTranslation, syncSelectedPromptsTranslations, setDialogHandlers as setDataDialogHandlers } from './data.js';
 import { translateText, translateAllPrompts, setTranslateHandlers, setTranslateAllProgressCallback, getFallbackTranslation } from './translate.js';
-import { initSearch, initSearchEvents, handleSearch } from './search.js';
+import { initSearch, initSearchEvents } from './search.js';
 import { initBatch, toggleBatchMode, exitBatchMode, updateBatchInfo, batchDeletePrompts, batchMovePrompts, performBatchMove, batchEditPrompts, initBatchEvents } from './batch.js';
 import { initSettings, openSettingsModal, saveSettings, handleBgImageUpload, clearBgImage, loadBgImageFromFile, updateBgPreview, applyBackgroundSettings, toggleBgClarityMode, applyBgClarityMode, bindSettingsEvents } from './settings.js';
-import { initRender, cacheElements, elements, renderCategoryList, renderCustomCategoryList, renderPromptList, renderFrequentPrompts, renderSelectedPrompts, renderPreview, renderRandomCategorySelector, renderExamples, showNotification, showConfirmDialog, showInputDialog, renderCategoryPromptsList, toggleCategoryBatchMode, exitCategoryBatchMode, categoryBatchDelete } from './render.js';
+import { initRender, cacheElements, elements, renderCategoryList, renderCustomCategoryList, renderPromptList, renderSelectedPrompts, renderPreview, renderRandomCategorySelector, renderExamples, showNotification, showConfirmDialog, showInputDialog, renderCategoryPromptsList, toggleCategoryBatchMode, exitCategoryBatchMode, categoryBatchDelete, initPromptImageUpload } from './render.js';
 import { initEvents, bindEvents, bindSettingsEvents as bindSettingsEventsFromEvents, initSearchEvents as bindSearchEvents, initBatchEvents as bindBatchEvents, initSortEvents, initPreviewPanelResize } from './events.js';
 
 function selectCategory(categoryId) {
@@ -382,32 +382,49 @@ function matchShortcut(e, shortcut) {
 async function initApp() {
   const cacheStart = performance.now();
   let usedCache = false;
+  let notifiedReady = false;
+
+  // 确保在任何情况下（包括异常）都通知主进程显示窗口
+  const ensureNotifyReady = () => {
+    if (notifiedReady) return;
+    notifiedReady = true;
+    if (window.electronAPI && window.electronAPI.notifyReady) {
+      window.electronAPI.notifyReady();
+    }
+  };
 
   try {
-    // 并行加载所有缓存数据，减少串行 IPC 往返延迟
-    const [dataLoaded, settingsLoaded, translationsLoaded, usageLoaded] = await Promise.all([
-      loadDataFromCache(),
-      loadSettingsFromCache(),
-      loadTranslationsFromCache(),
-      loadUsageFromCache()
-    ]);
+  // 在等待 IPC 期间提前执行 DOM 查询，重叠 IO 与 CPU
+  const cachePromise = (async () => {
+    try {
+      const [dataLoaded, settingsLoaded, translationsLoaded, usageLoaded] = await Promise.all([
+        loadDataFromCache(),
+        loadSettingsFromCache(),
+        loadTranslationsFromCache(),
+        loadUsageFromCache()
+      ]);
 
-    if (dataLoaded && settingsLoaded && translationsLoaded && usageLoaded) {
-      usedCache = true;
-    } else {
-      // 部分缓存缺失时回退到 localStorage
-      if (!dataLoaded) loadData();
-      if (!translationsLoaded) loadTranslations();
-      if (!settingsLoaded) loadSettings();
-      if (!usageLoaded) loadPromptUsage();
+      if (dataLoaded && settingsLoaded && translationsLoaded && usageLoaded) {
+        usedCache = true;
+      } else {
+        if (!dataLoaded) loadData();
+        if (!translationsLoaded) loadTranslations();
+        if (!settingsLoaded) loadSettings();
+        if (!usageLoaded) loadPromptUsage();
+      }
+    } catch (error) {
+      console.error('Cache load failed, falling back to localStorage:', error);
+      loadData();
+      loadTranslations();
+      loadSettings();
+      loadPromptUsage();
     }
-  } catch (error) {
-    console.error('Cache load failed, falling back to localStorage:', error);
-    loadData();
-    loadTranslations();
-    loadSettings();
-    loadPromptUsage();
-  }
+  })();
+
+  // 利用 IPC 等待时间执行 DOM 元素缓存
+  cacheElements();
+
+  await cachePromise;
 
   if (!appState.categories || appState.categories.length === 0) {
     appState.categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
@@ -418,8 +435,6 @@ async function initApp() {
 
   const cacheEnd = performance.now();
   console.log(`[启动] 数据加载耗时: ${(cacheEnd - cacheStart).toFixed(1)}ms (${usedCache ? '文件缓存' : 'localStorage'})`);
-
-  cacheElements();
 
   setNotificationHandler(showNotification);
   setDataDialogHandlers({ showConfirm: showConfirmDialog, showInput: showInputDialog, showNotification, translateText,
@@ -478,12 +493,33 @@ async function initApp() {
   renderRandomCategorySelector();
   bindEvents();
   bindSettingsEventsFromEvents();
-  applyBackgroundSettings(elements);
   applyBgClarityMode();
 
-  // 关键路径完成，记录渲染初始化耗时
+  // 关键路径：加载背景图（超时 2 秒，超时则先显示窗口，背景图稍后异步加载）
+  const bgStart = performance.now();
+  let bgLoaded = false;
+  try {
+    await Promise.race([
+      loadBgImageFromFile().then(() => { bgLoaded = true; }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+    ]);
+  } catch (e) {
+    // 超时，背景图稍后异步加载
+    console.log('[启动] 背景图加载超时，稍后异步加载');
+    loadBgImageFromFile().then(() => {
+      applyBackgroundSettings(elements);
+    }).catch(() => {});
+  }
+
+  if (bgLoaded) {
+    applyBackgroundSettings(elements);
+  }
+
   const renderEnd = performance.now();
-  console.log(`[启动] 渲染初始化耗时: ${(renderEnd - cacheEnd).toFixed(1)}ms`);
+  console.log(`[启动] 渲染初始化耗时: ${(renderEnd - cacheEnd).toFixed(1)}ms (背景图: ${(renderEnd - bgStart).toFixed(1)}ms)`);
+
+  // 所有数据加载完成（或超时），通知主进程显示主窗口
+  ensureNotifyReady();
 
   // 非关键初始化延迟到空闲时执行，不阻塞首屏交互
   const deferredInit = () => {
@@ -492,11 +528,9 @@ async function initApp() {
     bindSearchEvents();
     bindBatchEvents();
     initSortEvents();
+    initPromptImageUpload();
 
     migrateData();
-    loadBgImageFromFile().then(() => {
-      applyBackgroundSettings(elements);
-    });
   };
 
   if (window.requestIdleCallback) {
@@ -515,11 +549,22 @@ async function initApp() {
     });
   }
 
+  // 缓存快捷键解析结果，避免每次 keydown 都重新解析
+  let _cachedShortcutStr = null;
+  let _cachedShortcut = null;
+  function getCachedShortcut() {
+    const shortcutStr = appState.settings.exportShortcut || 'Ctrl+Shift+E';
+    if (shortcutStr !== _cachedShortcutStr) {
+      _cachedShortcutStr = shortcutStr;
+      _cachedShortcut = parseShortcut(shortcutStr);
+    }
+    return _cachedShortcut;
+  }
+
   document.addEventListener('keydown', (e) => {
     const target = e.target;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
-    const shortcutStr = appState.settings.exportShortcut || 'Ctrl+Shift+E';
-    const shortcut = parseShortcut(shortcutStr);
+    const shortcut = getCachedShortcut();
     if (shortcut && matchShortcut(e, shortcut)) {
       e.preventDefault();
       exportAllDataShortcut().catch(err => console.error('Export shortcut error:', err));
@@ -528,6 +573,12 @@ async function initApp() {
 
   const initEnd = performance.now();
   console.log(`[启动] 总初始化耗时: ${(initEnd - cacheStart).toFixed(1)}ms`);
+  } catch (err) {
+    console.error('initApp error:', err);
+  } finally {
+    // 确保在任何情况下都通知主进程显示窗口
+    ensureNotifyReady();
+  }
 }
 
 export { initApp };

@@ -116,16 +116,24 @@ export function handleSearch() {
   for (const category of appState.categories) {
     for (const prompt of category.prompts) {
       const text = getPromptText(prompt);
-      const translation = getPromptTranslation(prompt);
-      const textMatch = text.toLowerCase().includes(lowerQuery);
-      const transMatch = translation && translation.toLowerCase().includes(lowerQuery);
+      const lowerText = text.toLowerCase();
+      const textMatch = lowerText.includes(lowerQuery);
+      let transMatch = false;
+      if (textMatch) {
+        // text already matched, skip translation check
+      } else {
+        const translation = getPromptTranslation(prompt);
+        if (translation) {
+          transMatch = translation.toLowerCase().includes(lowerQuery);
+        }
+      }
       if (textMatch || transMatch) {
         results.push({
           prompt,
           category,
           textMatch,
           transMatch,
-          exactMatch: text.toLowerCase() === lowerQuery
+          exactMatch: lowerText === lowerQuery
         });
       }
     }

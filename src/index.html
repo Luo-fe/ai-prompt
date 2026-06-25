@@ -1,9 +1,9 @@
 <html lang="zh-CN"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Luo-fe的本地提示词管理器 v1.3</title>
+    <title>Luo-fe的本地提示词管理器 v1.4</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
 </head>
 <body>
     <div class="bg-image-overlay" id="bg-image-overlay"></div>
@@ -11,7 +11,7 @@
         <header class="navbar" id="navbar">
             <div class="titlebar-drag">
                 <div class="logo">
-                    <h1>Luo-fe的本地提示词管理器 v1.3</h1>
+                    <h1>Luo-fe的本地提示词管理器 v1.4</h1>
                 </div>
             </div>
             <div class="nav-actions">
@@ -434,8 +434,56 @@
                     <p class="settings-desc">点击输入框后按下组合键设置快捷键（默认: Ctrl+Shift+E）。选择"复制到剪贴板"时将选中提示词的原词以英文逗号隔开复制到剪贴板；选择文件导出时将选中提示词的类别、词语和翻译导出为对应格式文件，可选择保存位置。</p>
                 </div>
                 <div class="settings-section">
+                    <h4>预览图设置</h4>
+                    <p class="settings-desc">在未开启右键复制时，右键提示词可上传预览图。悬停提示词时显示预览图弹窗，支持任意长宽比例自适应。开启像素限制后，上传的图片会自动压缩到合格像素，不会因体积过大被拒绝。</p>
+                    <div class="setting-item">
+                        <label class="switch">
+                            <input type="checkbox" id="preview-image-limit-enabled" checked>
+                            <span class="slider round"></span>
+                        </label>
+                        <span>限制预览图像素大小（自动压缩）</span>
+                    </div>
+                    <div class="setting-item">
+                        <label for="preview-image-max-dimension">压缩最大边长（像素）:</label>
+                        <input type="number" id="preview-image-max-dimension" class="form-input" min="50" max="500" value="200" style="width:100px">
+                        <span class="settings-desc" style="margin-left:0.4rem">范围 50-500</span>
+                    </div>
+                    <div class="setting-item">
+                        <label for="preview-image-display-size">悬停预览显示尺寸（像素）:</label>
+                        <input type="number" id="preview-image-display-size" class="form-input" min="100" max="500" value="220" style="width:100px">
+                        <span class="settings-desc" style="margin-left:0.4rem">范围 100-500</span>
+                    </div>
+                    <div class="setting-item">
+                        <button id="open-prompt-images-folder-btn" class="btn btn-secondary btn-small">
+                            <i class="fa fa-folder-open"></i> 打开预览图文件夹
+                        </button>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h4>数据存储位置</h4>
+                    <p class="settings-desc">所有用户数据（分类、提示词、背景图、预览图、设置等）存储在此位置。默认存储在安装目录下，可更改到其他位置。更改时数据将自动移动到新位置。</p>
+                    <div class="data-directory-info">
+                        <div class="setting-item">
+                            <label>当前位置:</label>
+                            <span id="data-directory-path" class="data-directory-path">加载中...</span>
+                            <span id="data-directory-mode" class="data-directory-mode"></span>
+                        </div>
+                        <div class="data-directory-actions">
+                            <button id="change-data-directory-btn" class="btn btn-info btn-small">
+                                <i class="fa fa-folder-open"></i> 更改位置
+                            </button>
+                            <button id="open-data-directory-btn" class="btn btn-secondary btn-small">
+                                <i class="fa fa-external-link"></i> 打开文件夹
+                            </button>
+                            <button id="reset-data-directory-btn" class="btn btn-secondary btn-small" style="display:none">
+                                <i class="fa fa-undo"></i> 恢复默认
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-section">
                     <h4>缓存管理</h4>
-                    <p class="settings-desc">缓存文件存储在应用程序同级目录的 data/cache 文件夹中，用于加速应用启动。</p>
+                    <p class="settings-desc">缓存文件存储在数据目录的 cache 文件夹中，用于加速应用启动。</p>
                     <div id="cache-info" class="cache-info">加载中...</div>
                     <div class="cache-actions">
                         <button id="refresh-cache-info-btn" class="btn btn-secondary btn-small">
@@ -471,6 +519,20 @@
                 <button id="confirm-cancel-btn" class="btn btn-secondary">取消</button>
                 <button id="confirm-ok-btn" class="btn btn-danger">确认</button>
             </div>
+        </div>
+    </div>
+
+    <input type="file" id="prompt-image-file-input" accept="image/*" class="hidden-input">
+    <div id="prompt-image-preview" class="prompt-image-preview">
+        <img id="prompt-image-preview-img" alt="预览图">
+    </div>
+
+    <div id="prompt-image-enlarged-modal" class="prompt-image-enlarged-modal" role="dialog" aria-modal="true">
+        <div class="prompt-image-enlarged-content">
+            <button id="prompt-image-enlarged-close" class="prompt-image-enlarged-close" title="关闭" aria-label="关闭">
+                <i class="fa fa-times"></i>
+            </button>
+            <img id="prompt-image-enlarged-img" alt="预览图（放大查看）">
         </div>
     </div>
 

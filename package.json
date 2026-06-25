@@ -1,14 +1,14 @@
 {
   "name": "luo-fe-prompt-manager",
-  "version": "1.3.0",
+  "version": "1.4.1",
   "description": "Luo-fe本地提示词管理器 - AI文生图提示词工具",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win portable",
     "build:nsis": "electron-builder --win nsis",
-    "build:all": "electron-builder --win",
-    "build:portable-fast": "electron-builder --win dir && powershell -Command \"Compress-Archive -Path 'dist/win-unpacked/*' -DestinationPath 'dist/Luo-fe本地提示词管理器_v1.3_便携版.zip' -Force\""
+    "build:portable": "electron-builder --win portable",
+    "build:zip": "electron-builder --win dir && powershell -Command \"Compress-Archive -Path 'dist/win-unpacked/*' -DestinationPath 'dist/Luo-fe本地提示词管理器_v1.4.1_便携版.zip' -Force\"",
+    "build:all": "electron-builder --win nsis portable dir && powershell -Command \"Compress-Archive -Path 'dist/win-unpacked/*' -DestinationPath 'dist/Luo-fe本地提示词管理器_v1.4.1_便携版.zip' -Force\""
   },
   "author": "Luo-fe",
   "productName": "Luo-fe的本地提示词管理器",
@@ -16,9 +16,9 @@
   "devDependencies": {
     "electron": "^33.0.0",
     "electron-builder": "^25.1.8",
+    "rcedit": "^5.0.2",
     "sharp": "^0.34.5",
-    "to-ico": "^1.1.5",
-    "rcedit": "^5.0.2"
+    "to-ico": "^1.1.5"
   },
   "build": {
     "appId": "com.luofe.prompt-manager",
@@ -41,21 +41,24 @@
       "signAndEditExecutable": false,
       "target": [
         {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
           "target": "portable",
           "arch": [
             "x64"
           ]
         },
         {
-          "target": "nsis",
+          "target": "dir",
           "arch": [
             "x64"
           ]
         }
       ]
-    },
-    "portable": {
-      "artifactName": "Luo-fe本地提示词管理器_v1.3_便携版.exe"
     },
     "nsis": {
       "oneClick": false,
@@ -64,14 +67,20 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Luo-fe的本地提示词管理器",
-      "artifactName": "Luo-fe本地提示词管理器_v1.3_安装版.exe",
+      "artifactName": "Luo-fe本地提示词管理器_v1.4.1_安装版.exe",
       "include": "installer.nsh",
       "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "Luo-fe本地提示词管理器_v1.4.1_便携版.exe"
     },
     "asar": true,
     "asarUnpack": [],
     "electronDownload": {
       "mirror": "https://npmmirror.com/mirrors/electron/"
     }
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^6.5.1"
   }
 }

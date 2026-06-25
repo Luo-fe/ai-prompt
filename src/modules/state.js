@@ -7,7 +7,6 @@ const appState = {
   selectedCategoryId: null,
   selectedPrompts: {},
   nextCategoryId: 1,
-  dataVersion: 0,
   translations: {},
   settings: {
     translationEnabled: true,
@@ -28,7 +27,12 @@ const appState = {
       order: 'original-first'
     },
     exportShortcut: 'Ctrl+Shift+E',
-    exportShortcutTarget: 'clipboard'
+    exportShortcutTarget: 'clipboard',
+    previewImage: {
+      limitEnabled: true,
+      maxDimension: 200,
+      displaySize: 220
+    }
   },
   promptUsage: {},
   batchMode: false,
@@ -103,6 +107,18 @@ const debouncedSaveData = debounce(() => {
   }
 }, SAVE_DATA_DEBOUNCE);
 
+// 防抖保存使用频率数据，避免频繁复制/选择提示词时产生过多 I/O
+const debouncedSavePromptUsage = debounce(() => {
+  try {
+    localStorage.setItem('aiPromptToolUsage', JSON.stringify(appState.promptUsage));
+  } catch (error) {
+    console.warn('savePromptUsage failed:', error);
+  }
+  if (isCacheAvailable()) {
+    writeCache(CACHE_KEYS.USAGE, appState.promptUsage).catch(() => {});
+  }
+}, SAVE_DATA_DEBOUNCE);
+
 function saveData() {
   debouncedSaveData();
 }
@@ -111,7 +127,8 @@ function saveDataImmediate() {
   const data = {
     categories: appState.categories,
     selectedPrompts: appState.selectedPrompts,
-    nextCategoryId: appState.nextCategoryId
+    nextCategoryId: appState.nextCategoryId,
+    dataVersion: appState.dataVersion
   };
   try {
     localStorage.setItem('aiPromptToolData', JSON.stringify(data));
@@ -161,11 +178,15 @@ function loadSettings() {
         };
         delete data.rightClickCopyConfig;
       }
+      // 深度合并 previewImage，避免部分缓存覆盖默认值
+      if (data.previewImage) {
+        appState.settings.previewImage = {
+          ...appState.settings.previewImage,
+          ...data.previewImage
+        };
+        delete data.previewImage;
+      }
       Object.assign(appState.settings, data);
-    }
-    const bgCache = localStorage.getItem('aiPromptToolBgCache');
-    if (bgCache) {
-      appState.bgImageData = bgCache;
     }
   } catch (error) {
     console.warn('loadSettings failed:', error);
@@ -184,6 +205,14 @@ async function loadSettingsFromCache() {
           ...cached.rightClickCopyConfig
         };
         delete cached.rightClickCopyConfig;
+      }
+      // 深度合并 previewImage，避免部分缓存覆盖默认值
+      if (cached.previewImage) {
+        appState.settings.previewImage = {
+          ...appState.settings.previewImage,
+          ...cached.previewImage
+        };
+        delete cached.previewImage;
       }
       Object.assign(appState.settings, cached);
       return true;
@@ -276,15 +305,11 @@ async function loadUsageFromCache() {
 }
 
 function savePromptUsage() {
-  try {
-    localStorage.setItem('aiPromptToolUsage', JSON.stringify(appState.promptUsage));
-    if (isCacheAvailable()) {
-      writeCache(CACHE_KEYS.USAGE, appState.promptUsage).catch(() => {});
-    }
-  } catch (error) {
-    console.warn('savePromptUsage failed:', error);
-  }
+  debouncedSavePromptUsage();
 }
+
+// 缓存频繁使用的提示词，避免每次 renderPromptList 都重新计算
+let _frequentCache = { categoryId: null, count: 0, result: [] };
 
 function recordPromptUsage(categoryId, promptText) {
   const key = `${categoryId}::${promptText}`;
@@ -292,19 +317,29 @@ function recordPromptUsage(categoryId, promptText) {
     appState.promptUsage[key] = 0;
   }
   appState.promptUsage[key]++;
+  // 使缓存失效
+  _frequentCache.categoryId = null;
   savePromptUsage();
 }
 
 function getFrequentPrompts(categoryId, count) {
+  // 如果缓存命中（相同分类、相同请求数量），直接返回缓存结果
+  if (_frequentCache.categoryId === categoryId && _frequentCache.count === count) {
+    return _frequentCache.result;
+  }
+
   const category = getCategoryById(appState.categories, categoryId);
-  if (!category) return [];
+  if (!category) {
+    _frequentCache = { categoryId, count, result: [] };
+    return [];
+  }
 
   const usageEntries = Object.entries(appState.promptUsage)
     .filter(([key]) => key.startsWith(`${categoryId}::`))
     .sort((a, b) => b[1] - a[1])
     .slice(0, count);
 
-  return usageEntries.map(([key, countVal]) => {
+  const result = usageEntries.map(([key, countVal]) => {
     const text = key.substring(key.indexOf('::') + 2);
     const prompt = category.prompts.find(p => getPromptText(p) === text);
     return {
@@ -313,6 +348,9 @@ function getFrequentPrompts(categoryId, count) {
       count: countVal
     };
   });
+
+  _frequentCache = { categoryId, count, result };
+  return result;
 }
 
 function setNotificationHandler(handler) {

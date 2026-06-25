@@ -134,12 +134,12 @@ export const FALLBACK_TRANSLATIONS = {
   'male': '男性', 'female': '女性'
 }
 
-export const TRANSLATION_CACHE_LIMIT = 500
-export const SEARCH_RESULT_LIMIT = 30
-export const API_TIMEOUT = 10000
-export const NOTIFICATION_DURATION = 3000
-export const NOTIFICATION_MAX_COUNT = 3
-export const BG_IMAGE_MAX_SIZE = 10 * 1024 * 1024
-export const BATCH_TRANSLATE_INTERVAL = 100
-export const SAVE_DATA_DEBOUNCE = 300
-export const DATA_VERSION = 2
+export const TRANSLATION_CACHE_LIMIT = 500;
+export const SEARCH_RESULT_LIMIT = 30;
+export const API_TIMEOUT = 10000;
+export const NOTIFICATION_DURATION = 3000;
+export const NOTIFICATION_MAX_COUNT = 3;
+export const BG_IMAGE_MAX_SIZE = 10 * 1024 * 1024;
+export const BATCH_TRANSLATE_INTERVAL = 100;
+export const SAVE_DATA_DEBOUNCE = 300;
+export const DATA_VERSION = 2;
