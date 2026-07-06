@@ -1,5 +1,5 @@
 import { appState, saveData } from './state.js';
-import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, sanitizeFilename } from './utils.js';
+import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, sanitizeFilename, createPromptKey } from './utils.js';
 
 let _translateText = async () => '';
 let _showConfirm = async () => false;
@@ -322,6 +322,18 @@ export function selectAllPrompts() {
   const categoryId = appState.selectedCategoryId;
   const category = getCategoryById(appState.categories, categoryId);
   if (!category) return;
+
+  if (appState.batchMode) {
+    category.prompts.forEach(prompt => {
+      const promptKey = createPromptKey(categoryId, getPromptText(prompt));
+      appState.batchSelected.add(promptKey);
+    });
+    _renderPromptList(categoryId);
+    const batchInfo = document.querySelector('.batch-info');
+    if (batchInfo) batchInfo.textContent = `已选择 ${appState.batchSelected.size} 项`;
+    return;
+  }
+
   appState.selectedPrompts[categoryId] = category.prompts.map(p => ({
     text: getPromptText(p),
     translation: getPromptTranslation(p)
@@ -334,6 +346,18 @@ export function selectAllPrompts() {
 
 export function deselectAllPrompts() {
   const categoryId = appState.selectedCategoryId;
+
+  if (appState.batchMode) {
+    const prefix = `${categoryId}::`;
+    for (const key of [...appState.batchSelected]) {
+      if (key.startsWith(prefix)) appState.batchSelected.delete(key);
+    }
+    _renderPromptList(categoryId);
+    const batchInfo = document.querySelector('.batch-info');
+    if (batchInfo) batchInfo.textContent = `已选择 ${appState.batchSelected.size} 项`;
+    return;
+  }
+
   if (appState.selectedPrompts[categoryId]) {
     appState.selectedPrompts[categoryId] = [];
   }

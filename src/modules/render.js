@@ -1,6 +1,7 @@
 import { appState, saveDataImmediate } from './state.js';
 import { getPromptText, getPromptTranslation, getCategoryById, findPromptInCategory, createPromptKey, sanitizeFilename } from './utils.js';
-import { EXAMPLES, NOTIFICATION_DURATION, NOTIFICATION_MAX_COUNT } from './constants.js';
+import { NOTIFICATION_DURATION, NOTIFICATION_MAX_COUNT } from './constants.js';
+import { BUILTIN_CATEGORY_IDS } from './learning.js';
 
 let handlers = {};
 
@@ -113,10 +114,12 @@ export function cacheElements() {
   elements.rccIncludeTranslation = document.getElementById('rcc-include-translation');
   elements.rccConnector = document.getElementById('rcc-connector');
   elements.rccCustomConnector = document.getElementById('rcc-custom-connector');
+  elements.rccAppendConnector = document.getElementById('rcc-append-connector');
   elements.rccPreviewText = document.getElementById('rcc-preview-text');
   elements.exportShortcutInput = document.getElementById('export-shortcut-input');
   elements.exportShortcutResetBtn = document.getElementById('export-shortcut-reset-btn');
   elements.exportShortcutTarget = document.getElementById('export-shortcut-target');
+  elements.exportShortcutAppendConnector = document.getElementById('export-shortcut-append-connector');
   elements.previewImageLimitEnabled = document.getElementById('preview-image-limit-enabled');
   elements.previewImageMaxDimension = document.getElementById('preview-image-max-dimension');
   elements.previewImageDisplaySize = document.getElementById('preview-image-display-size');
@@ -132,6 +135,108 @@ export function cacheElements() {
   elements.changeDataDirectoryBtn = document.getElementById('change-data-directory-btn');
   elements.openDataDirectoryBtn = document.getElementById('open-data-directory-btn');
   elements.resetDataDirectoryBtn = document.getElementById('reset-data-directory-btn');
+  // 布局自定义相关元素
+  elements.layoutCustomizeBtn = document.getElementById('layout-customize-btn');
+  elements.layoutLockToggle = document.getElementById('layout-lock-toggle');
+  elements.layoutResetBtn = document.getElementById('layout-reset-btn');
+  elements.layoutEditToolbar = document.getElementById('layout-edit-toolbar');
+  elements.layoutEditSave = document.getElementById('layout-edit-save');
+  elements.layoutEditCancel = document.getElementById('layout-edit-cancel');
+  elements.layoutEditReset = document.getElementById('layout-edit-reset');
+  elements.layoutEditThreeCol = document.getElementById('layout-edit-three-col');
+  elements.layoutEditSingleCol = document.getElementById('layout-edit-single-col');
+  elements.mainContent = document.querySelector('.main-content');
+  elements.categoryPanel = document.querySelector('.category-panel');
+  elements.promptPanel = document.querySelector('.prompt-panel');
+  elements.previewPanel = document.querySelector('.preview-panel');
+  // Tokenizer 元素
+  elements.tokenizerBtn = document.getElementById('tokenizer-btn');
+  elements.tokenizerModal = document.getElementById('tokenizer-modal');
+  elements.tokenizerInput = document.getElementById('tokenizer-input');
+  elements.tokenizerClassifyBtn = document.getElementById('tokenizer-classify-btn');
+  elements.tokenizerResults = document.getElementById('tokenizer-results');
+  elements.tokenizerStats = document.getElementById('tokenizer-stats');
+  elements.tokenizerSelectAllBtn = document.getElementById('tokenizer-select-all-btn');
+  elements.tokenizerDeleteSelectedBtn = document.getElementById('tokenizer-delete-selected-btn');
+  elements.tokenizerMoveBtn = document.getElementById('tokenizer-move-btn');
+  elements.tokenizerImportBtn = document.getElementById('tokenizer-import-btn');
+  // 设置面板
+  elements.tokenizerEnabledCheckbox = document.getElementById('tokenizer-enabled-checkbox');
+  elements.tokenizerVersion = document.getElementById('tokenizer-version');
+  elements.tokenizerTagCount = document.getElementById('tokenizer-tag-count');
+  elements.tokenizerCategoryCount = document.getElementById('tokenizer-category-count');
+  elements.tokenizerEditRulesBtn = document.getElementById('tokenizer-edit-rules-btn');
+  // Learning 模型元素
+  elements.learningOpenBtn = document.getElementById('open-learning-modal-btn');
+  elements.learningModal = document.getElementById('learning-modal');
+  elements.learningCloseBtn = elements.learningModal ? elements.learningModal.querySelector('.close') : null;
+  elements.learningTrainBtn = document.getElementById('learning-train-btn');
+  elements.learningDeleteModelBtn = document.getElementById('learning-delete-model-btn');
+  elements.learningSaveSamplesBtn = document.getElementById('learning-save-samples-btn');
+  elements.learningImportFileBtn = document.getElementById('learning-import-file-btn');
+  elements.learningImportFileInput = document.getElementById('learning-import-file-input');
+  elements.learningImportCategoryBtn = document.getElementById('learning-import-category-btn');
+  elements.learningImportCategoryModal = document.getElementById('learning-import-category-modal');
+  elements.learningImportCategoryList = document.getElementById('learning-import-category-list');
+  elements.learningImportCategoryCancelBtn = document.getElementById('learning-import-category-cancel-btn');
+  elements.learningAddCategoryBtn = document.getElementById('learning-add-category-btn');
+  elements.learningRenameCategoryBtn = document.getElementById('learning-rename-category-btn');
+  elements.learningDeleteCategoryBtn = document.getElementById('learning-delete-category-btn');
+  elements.learningCategoryList = document.getElementById('learning-category-list');
+  elements.learningSamplesTextarea = document.getElementById('learning-samples-textarea');
+  elements.learningCurrentCatLabel = document.getElementById('learning-current-cat-label');
+  elements.learningSampleCount = document.getElementById('learning-sample-count');
+  elements.learningModelStatusText = document.getElementById('learning-model-status-text');
+  elements.tokenizerDiagnosticBtn = document.getElementById('tokenizer-diagnostic-btn');
+  elements.tokenizerDiagnosticInfo = document.getElementById('tokenizer-diagnostic-info');
+  elements.learningEnabledCheckbox = document.getElementById('learning-enabled-checkbox');
+  elements.learningMinConfidenceSelect = document.getElementById('learning-min-confidence-select');
+  // 设置面板中的学习模型 info-value（与 learning.js 状态同步）
+  elements.learningModelStatusInfo = document.getElementById('learning-model-status');
+  elements.learningSampleCountInfo = document.getElementById('learning-sample-count');
+  elements.learningCategoryCountInfo = document.getElementById('learning-category-count');
+}
+
+/**
+ * 应用自定义布局到 DOM
+ * - 设置面板 flex-grow 比例（通过 CSS 变量）
+ * - 设置面板顺序（通过 order 属性）
+ * - 设置布局方向（三栏 row / 单栏 column）
+ * - 切换 locked 类（禁用响应式）
+ * 在初始化、设置加载/保存后调用
+ */
+export function applyCustomLayout() {
+  const layout = appState.settings.customLayout;
+  if (!layout || !layout.panels) return;
+  const { panels, locked, direction } = layout;
+  const body = document.body;
+  const root = document.documentElement;
+
+  // 设置 flex-grow 比例 CSS 变量（三栏模式分配宽度，单栏模式分配高度）
+  root.style.setProperty('--layout-category-ratio', panels.category.ratio);
+  root.style.setProperty('--layout-prompt-ratio', panels.prompt.ratio);
+  root.style.setProperty('--layout-preview-ratio', panels.preview.ratio);
+
+  // 设置 order 属性控制面板顺序
+  if (elements.categoryPanel) elements.categoryPanel.style.order = panels.category.order;
+  if (elements.promptPanel)   elements.promptPanel.style.order = panels.prompt.order;
+  if (elements.previewPanel)  elements.previewPanel.style.order = panels.preview.order;
+
+  // 布局方向：三栏 row / 单栏 column
+  if (direction === 'column') {
+    body.classList.add('layout-single-column');
+    body.classList.remove('layout-three-column');
+  } else {
+    body.classList.add('layout-three-column');
+    body.classList.remove('layout-single-column');
+  }
+
+  // 锁死布局：添加/移除 class
+  if (locked) {
+    body.classList.add('layout-locked');
+  } else {
+    body.classList.remove('layout-locked');
+  }
 }
 
 export function renderCategoryList() {
@@ -285,31 +390,18 @@ export function renderPromptList(categoryId) {
     return;
   }
 
-  renderFrequentPrompts(targetId);
+  if (appState.batchMode) {
+    elements.frequentSection.classList.add('hidden');
+  } else {
+    renderFrequentPrompts(targetId);
+  }
 
   elements.promptList.innerHTML = '';
   const frag = document.createDocumentFragment();
   category.prompts.forEach(prompt => {
     const item = document.createElement('div');
-    item.className = `prompt-item ${handlers.isPromptSelected(category.id, prompt) ? 'selected' : ''}`;
-
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.className = 'prompt-checkbox';
-    cb.checked = handlers.isPromptSelected(category.id, prompt);
-    cb.addEventListener('change', () => handlePromptToggle(category.id, prompt));
-
-    const batchCb = document.createElement('input');
-    batchCb.type = 'checkbox';
-    batchCb.className = 'batch-checkbox';
     const promptKey = createPromptKey(category.id, getPromptText(prompt));
-    batchCb.checked = appState.batchSelected.has(promptKey);
-    batchCb.addEventListener('change', e => {
-      e.stopPropagation();
-      if (batchCb.checked) appState.batchSelected.add(promptKey);
-      else appState.batchSelected.delete(promptKey);
-      updateBatchInfo();
-    });
+    const hasImage = typeof prompt === 'object' && prompt !== null && prompt.imagePath;
 
     const textContainer = document.createElement('div');
     textContainer.className = 'prompt-text-container';
@@ -322,7 +414,6 @@ export function renderPromptList(categoryId) {
       textContainer.appendChild(createTranslationUI(category.id, prompt));
     }
 
-    const hasImage = typeof prompt === 'object' && prompt !== null && prompt.imagePath;
     if (hasImage) {
       const imgIcon = document.createElement('span');
       imgIcon.className = 'prompt-image-icon';
@@ -331,15 +422,41 @@ export function renderPromptList(categoryId) {
       textContainer.appendChild(imgIcon);
     }
 
-    item.appendChild(cb);
-    item.appendChild(batchCb);
-    item.appendChild(textContainer);
-    item.addEventListener('click', e => {
-      if (e.target !== cb && !e.target.closest('.editable-translation') && !e.target.closest('.inline-translate-btn') && !e.target.closest('.translation-edit-input') && !e.target.closest('.batch-checkbox') && !e.target.closest('.prompt-image-icon')) {
-        cb.checked = !cb.checked;
-        handlePromptToggle(category.id, prompt);
-      }
-    });
+    if (appState.batchMode) {
+      // 批量模式：不显示选用复选框，点击卡片任意位置切换批量选中，红色高亮
+      item.className = `prompt-item ${appState.batchSelected.has(promptKey) ? 'batch-selected' : ''}`;
+      item.appendChild(textContainer);
+      item.addEventListener('click', e => {
+        if (e.target.closest('.editable-translation') || e.target.closest('.inline-translate-btn') || e.target.closest('.translation-edit-input') || e.target.closest('.prompt-image-icon')) return;
+        if (appState.batchSelected.has(promptKey)) {
+          appState.batchSelected.delete(promptKey);
+          item.classList.remove('batch-selected');
+        } else {
+          appState.batchSelected.add(promptKey);
+          item.classList.add('batch-selected');
+        }
+        updateBatchInfo();
+      });
+    } else {
+      // 正常模式：选用复选框 + 点击切换选用
+      item.className = `prompt-item ${handlers.isPromptSelected(category.id, prompt) ? 'selected' : ''}`;
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'prompt-checkbox';
+      cb.checked = handlers.isPromptSelected(category.id, prompt);
+      cb.addEventListener('change', () => handlePromptToggle(category.id, prompt));
+
+      item.appendChild(cb);
+      item.appendChild(textContainer);
+      item.addEventListener('click', e => {
+        if (e.target !== cb && !e.target.closest('.editable-translation') && !e.target.closest('.inline-translate-btn') && !e.target.closest('.translation-edit-input') && !e.target.closest('.prompt-image-icon')) {
+          cb.checked = !cb.checked;
+          handlePromptToggle(category.id, prompt);
+        }
+      });
+    }
+
     if (appState.settings.rightClickCopyEnabled) {
       item.addEventListener('contextmenu', e => {
         e.preventDefault();
@@ -578,53 +695,6 @@ export function renderRandomCategorySelector() {
   });
   elements.randomCategorySelector.innerHTML = '';
   elements.randomCategorySelector.appendChild(frag);
-}
-
-export function renderExamples() {
-  const section = document.querySelector('.examples-section');
-  if (!section) return;
-  while (section.children.length > 1) section.removeChild(section.lastChild);
-  EXAMPLES.forEach(example => {
-    const item = document.createElement('div');
-    item.className = 'example-item';
-
-    const nameEl = document.createElement('h4');
-    nameEl.textContent = example.name;
-    item.appendChild(nameEl);
-
-    Object.keys(example.combinations).forEach(categoryId => {
-      const category = getCategoryById(appState.categories, categoryId);
-      if (!category) return;
-      const p = document.createElement('p');
-      const strong = document.createElement('strong');
-      strong.textContent = category.name + ':';
-      p.appendChild(strong);
-      p.appendChild(document.createTextNode(' ' + example.combinations[categoryId].join(', ')));
-      item.appendChild(p);
-    });
-
-    let previewText = '';
-    let first = true;
-    Object.keys(example.combinations).forEach(categoryId => {
-      example.combinations[categoryId].forEach(p => {
-        if (!first) previewText += ', ';
-        previewText += p;
-        first = false;
-      });
-    });
-    const previewP = document.createElement('p');
-    previewP.className = 'example-combination';
-    previewP.textContent = `"${previewText}"`;
-    item.appendChild(previewP);
-
-    const applyBtn = document.createElement('button');
-    applyBtn.className = 'btn btn-small apply-example';
-    applyBtn.textContent = '应用此示例';
-    applyBtn.addEventListener('click', () => handlers.applyExample(example));
-    item.appendChild(applyBtn);
-
-    section.appendChild(item);
-  });
 }
 
 export function showNotification(message, type = 'success') {
@@ -912,7 +982,7 @@ export { _categoryBatchMode };
 
 export function buildRightClickCopyText(prompt) {
   const config = appState.settings.rightClickCopyConfig || {
-    includeOriginal: true, includeTranslation: true, connector: ', ', order: 'original-first'
+    includeOriginal: true, includeTranslation: true, connector: ', ', order: 'original-first', appendConnector: false
   };
   const original = getPromptText(prompt);
   const translation = getPromptTranslation(prompt);
@@ -924,9 +994,14 @@ export function buildRightClickCopyText(prompt) {
     if (config.includeOriginal) parts.push(original);
     if (config.includeTranslation && translation) parts.push(translation);
   }
-  if (parts.length === 0) return original;
-  if (parts.length === 1) return parts[0];
-  return parts.join(config.connector);
+  let connector = config.connector;
+  if (connector === 'custom') connector = config.customConnector || ', ';
+  let result;
+  if (parts.length === 0) result = original;
+  else if (parts.length === 1) result = parts[0];
+  else result = parts.join(connector);
+  if (config.appendConnector) result += connector;
+  return result;
 }
 
 // ================================
@@ -1263,3 +1338,407 @@ export function initPromptImageUpload() {
     }
   });
 }
+
+// ================================
+// Local Tokenizer Classifier
+// ================================
+
+/**
+ * 打开本地分词分类器弹窗
+ * - 清空输入区、结果区、统计文本
+ * - 添加 modal-active 类显示弹窗
+ * - 自动聚焦输入框
+ */
+export function openTokenizerModal() {
+  if (!elements.tokenizerModal) return;
+  if (elements.tokenizerInput) elements.tokenizerInput.value = '';
+  if (elements.tokenizerResults) elements.tokenizerResults.innerHTML = '';
+  if (elements.tokenizerStats) elements.tokenizerStats.textContent = '';
+  elements.tokenizerModal.classList.add('modal-active');
+  // 兼容 .modal 默认 display:none，确保弹窗可见
+  elements.tokenizerModal.style.display = 'block';
+  if (elements.tokenizerInput) {
+    setTimeout(() => elements.tokenizerInput.focus(), 50);
+  }
+}
+
+/**
+ * 关闭本地分词分类器弹窗
+ * - 移除 modal-active 类
+ * - 隐藏弹窗
+ */
+export function closeTokenizerModal() {
+  if (!elements.tokenizerModal) return;
+  elements.tokenizerModal.classList.remove('modal-active');
+  elements.tokenizerModal.style.display = 'none';
+}
+
+/**
+ * 渲染分词分类结果
+ * - 接收 results 数组，每项 {tag, category, subgroup, matched, source, selected, imported}
+ * - 按 category 分组，general 类别内再按 subgroup 二级分组
+ * - 每组渲染组标题（色点 + label + 计数）+ chips 容器
+ * - 类别颜色优先从 appState.tokenizerCache.dictionary.categories[cat].color 获取，找不到用 #64748b
+ * @param {Array<{tag:string, category:string, subgroup?:string, matched:boolean, source:string, selected?:boolean, imported?:boolean}>} results - 分类结果数组
+ */
+export function renderTokenizerResults(results) {
+  if (!elements.tokenizerResults) return;
+  elements.tokenizerResults.innerHTML = '';
+  if (!results || results.length === 0) return;
+
+  // 获取类别元信息（label + color）
+  const dict = (appState.tokenizerCache && appState.tokenizerCache.dictionary) || {};
+  const categories = dict.categories || {};
+
+  /**
+   * 内部辅助：获取类别 label 与 color
+   * @param {string} cat - 类别 id
+   * @returns {{label:string, color:string}}
+   */
+  const getCategoryMeta = (cat) => {
+    const meta = categories[cat] || {};
+    return {
+      label: meta.label || cat,
+      color: meta.color || '#64748b'
+    };
+  };
+
+  // 一级分组：按 category 聚合
+  const grouped = {};
+  results.forEach(item => {
+    const cat = item.category || 'general';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(item);
+  });
+
+  // general 类别放到最后（与其他 danbooru 体系一致：character/artist/copyright/meta 优先）
+  const categoryOrder = Object.keys(grouped).sort((a, b) => {
+    if (a === 'general' && b !== 'general') return 1;
+    if (b === 'general' && a !== 'general') return -1;
+    return a.localeCompare(b);
+  });
+
+  const frag = document.createDocumentFragment();
+
+  categoryOrder.forEach(cat => {
+    const items = grouped[cat];
+    const meta = getCategoryMeta(cat);
+
+    const groupEl = document.createElement('div');
+    groupEl.className = 'tokenizer-group';
+
+    // 组标题（色点 + label + 计数）
+    const header = document.createElement('div');
+    header.className = 'tokenizer-group-header';
+    const dot = document.createElement('span');
+    dot.className = 'group-color-dot';
+    dot.style.backgroundColor = meta.color;
+    const label = document.createElement('span');
+    label.className = 'group-label';
+    label.textContent = meta.label;
+    const count = document.createElement('span');
+    count.className = 'group-count';
+    count.textContent = `(${items.length})`;
+    header.appendChild(dot);
+    header.appendChild(label);
+    header.appendChild(count);
+    groupEl.appendChild(header);
+
+    if (cat === 'general') {
+      // general 类别内按 subgroup 二级分组
+      const subGrouped = {};
+      items.forEach(it => {
+        const sub = it.subgroup || 'other';
+        if (!subGrouped[sub]) subGrouped[sub] = [];
+        subGrouped[sub].push(it);
+      });
+      // 获取 subgroup label 映射
+      const subgroups = (categories.general && categories.general.subgroups) || {};
+
+      Object.keys(subGrouped).forEach(sub => {
+        const subItems = subGrouped[sub];
+        const subHeader = document.createElement('div');
+        subHeader.className = 'tokenizer-subgroup-header';
+        subHeader.textContent = subgroups[sub] || sub;
+        groupEl.appendChild(subHeader);
+
+        const chips = document.createElement('div');
+        chips.className = 'tokenizer-chips';
+        subItems.forEach(it => chips.appendChild(_buildTokenizerChip(it, meta.color)));
+        groupEl.appendChild(chips);
+      });
+    } else {
+      // 非 general 类别直接平铺 chips
+      const chips = document.createElement('div');
+      chips.className = 'tokenizer-chips';
+      items.forEach(it => chips.appendChild(_buildTokenizerChip(it, meta.color)));
+      groupEl.appendChild(chips);
+    }
+
+    frag.appendChild(groupEl);
+  });
+
+  elements.tokenizerResults.appendChild(frag);
+  updateTokenizerToolbar();
+}
+
+/**
+ * 内部辅助：构造单个 chip 元素
+ * @param {{tag:string, category:string, subgroup?:string, matched:boolean, selected?:boolean, imported?:boolean}} item
+ * @param {string} categoryColor - 类别色
+ * @returns {HTMLElement}
+ */
+function _buildTokenizerChip(item, categoryColor) {
+  const chip = document.createElement('div');
+  const selected = !!item.selected;
+  const imported = !!item.imported;
+  const matched = item.matched !== false;
+  const learned = item.source === 'learned';
+  const fromDict = item.source === 'dictionary';
+  const fromRule = item.source === 'rule';
+  chip.className = `tokenizer-chip ${selected ? 'selected' : ''} ${imported ? 'imported' : ''} ${!matched ? 'unmatched' : ''} ${learned ? 'learned' : ''} ${fromDict ? 'from-dict' : ''} ${fromRule ? 'from-rule' : ''}`.replace(/\s+/g, ' ').trim();
+  chip.dataset.tag = item.tag;
+  chip.dataset.category = item.category || '';
+  chip.dataset.subgroup = item.subgroup || '';
+  chip.dataset.source = item.source || 'fallback';
+  chip.style.setProperty('--chip-color', categoryColor || '#64748b');
+
+  const text = document.createElement('span');
+  text.className = 'chip-text';
+  text.textContent = item.tag;
+  chip.appendChild(text);
+
+  // 来源徽章：词典命中 📖 / 规则命中 ⚙（学习模型用 chip-confidence，未识别用 .unmatched 样式）
+  if (fromDict) {
+    const badge = document.createElement('span');
+    badge.className = 'chip-source-badge chip-source-dict';
+    badge.textContent = '📖';
+    badge.title = '词典命中';
+    chip.appendChild(badge);
+  } else if (fromRule) {
+    const badge = document.createElement('span');
+    badge.className = 'chip-source-badge chip-source-rule';
+    badge.textContent = '⚙';
+    badge.title = '规则命中';
+    chip.appendChild(badge);
+  }
+
+  // 学习模型预测来源：追加 🧠 置信度标记
+  if (learned && item.confidence != null) {
+    const conf = document.createElement('span');
+    conf.className = 'chip-confidence';
+    conf.textContent = `🧠 ${Math.round(item.confidence * 100)}%`;
+    chip.appendChild(conf);
+  }
+
+  if (imported) {
+    const icon = document.createElement('i');
+    icon.className = 'fas fa-check chip-imported-icon';
+    chip.appendChild(icon);
+  } else {
+    const del = document.createElement('i');
+    del.className = 'fas fa-times chip-delete';
+    chip.appendChild(del);
+  }
+  return chip;
+}
+
+/**
+ * 更新分词分类器底部工具栏状态
+ * - 计算 appState.tokenizerResults 中 selected=true && imported=false 的数量
+ * - 全选按钮：仅当无任何可选 chip（未导入）时禁用
+ * - 删除/移动/导入 3 个按钮：无选中时禁用
+ * - 更新 tokenizerStats 显示"已选 N 项 / 共 M 项"
+ */
+export function updateTokenizerToolbar() {
+  const list = (appState.tokenizerResults) || [];
+  const total = list.length;
+  const selectedCount = list.filter(it => it.selected && !it.imported).length;
+
+  if (elements.tokenizerStats) {
+    if (total > 0) {
+      const stats = { dictionary: 0, rule: 0, learned: 0, fallback: 0 };
+      list.forEach(it => {
+        const src = it.source || 'fallback';
+        if (Object.prototype.hasOwnProperty.call(stats, src)) stats[src]++;
+        else stats.fallback++;
+      });
+      elements.tokenizerStats.innerHTML =
+        `已选 ${selectedCount} / 共 ${total} · ` +
+        `<span class="stat-dict" title="词典命中">📖${stats.dictionary}</span>` +
+        `<span class="stat-rule" title="规则命中">⚙${stats.rule}</span>` +
+        `<span class="stat-learned" title="模型预测">🧠${stats.learned}</span>` +
+        `<span class="stat-unmatched" title="未识别">?${stats.fallback}</span>`;
+    } else {
+      elements.tokenizerStats.textContent = '';
+    }
+  }
+
+  const hasSelected = selectedCount > 0;
+  const hasSelectable = list.filter(r => !r.imported).length > 0;
+  // 全选按钮：仅当无任何可选 chip 时禁用
+  if (elements.tokenizerSelectAllBtn) {
+    elements.tokenizerSelectAllBtn.disabled = !hasSelectable;
+  }
+  // 其他 3 个按钮：无选中时禁用
+  const btns = [
+    elements.tokenizerDeleteSelectedBtn,
+    elements.tokenizerMoveBtn,
+    elements.tokenizerImportBtn
+  ];
+  btns.forEach(btn => {
+    if (!btn) return;
+    btn.disabled = !hasSelected;
+  });
+}
+
+/* ================================
+   学习中心渲染函数
+   ================================ */
+
+/**
+ * 渲染学习中心左侧类别列表
+ * - 区分内置类别（BUILTIN_CATEGORY_IDS）与自定义类别（samples.customCategories）
+ * - 每项显示色点 + label + 样本数 + 内置标记
+ * @param {Object} samples - { categories: {catId: [tag,...]}, customCategories: {catId: {label,color,...}} }
+ */
+export function renderLearningCategoryList(samples) {
+  if (!elements.learningCategoryList) return;
+  elements.learningCategoryList.innerHTML = '';
+  if (!samples || !samples.categories) return;
+
+  // 获取词典类别元信息（label + color），用于内置类别显示
+  const dict = (appState.tokenizerCache && appState.tokenizerCache.dictionary) || {};
+  const dictCategories = dict.categories || {};
+  const customCategories = samples.customCategories || {};
+
+  const catIds = Object.keys(samples.categories);
+  const frag = document.createDocumentFragment();
+
+  catIds.forEach(catId => {
+    const isBuiltin = BUILTIN_CATEGORY_IDS.includes(catId);
+    const customDef = customCategories[catId];
+    const dictDef = dictCategories[catId] || {};
+
+    let label, color;
+    if (isBuiltin) {
+      label = dictDef.label || catId;
+      color = dictDef.color || '#64748b';
+    } else if (customDef) {
+      label = customDef.label || catId;
+      color = customDef.color || '#64748b';
+    } else {
+      label = catId;
+      color = '#64748b';
+    }
+
+    const tags = samples.categories[catId];
+    const count = Array.isArray(tags) ? tags.length : 0;
+
+    const item = document.createElement('div');
+    item.className = 'learning-category-item' + (isBuiltin ? ' builtin' : '');
+    item.dataset.catId = catId;
+
+    const dot = document.createElement('span');
+    dot.className = 'learning-category-color';
+    dot.style.backgroundColor = color;
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'learning-category-label';
+    labelEl.textContent = label;
+
+    const countEl = document.createElement('span');
+    countEl.className = 'learning-category-count';
+    countEl.textContent = String(count);
+
+    item.appendChild(dot);
+    item.appendChild(labelEl);
+    item.appendChild(countEl);
+    frag.appendChild(item);
+  });
+
+  elements.learningCategoryList.appendChild(frag);
+}
+
+/**
+ * 渲染学习中心右侧样本编辑区
+ * - 将 samples.categories[catId] 标签数组填入 textarea（每行一个）
+ * - 更新当前类别 label 与样本数显示
+ * @param {string} catId - 类别 id
+ * @param {Object} samples - 样本对象
+ */
+export function renderLearningSamples(catId, samples) {
+  if (!samples || !samples.categories) return;
+  const tags = samples.categories[catId] || [];
+  const tagArray = Array.isArray(tags) ? tags : [];
+
+  if (elements.learningSamplesTextarea) {
+    elements.learningSamplesTextarea.value = tagArray.join('\n');
+  }
+
+  // 解析类别 label
+  const dict = (appState.tokenizerCache && appState.tokenizerCache.dictionary) || {};
+  const dictCategories = dict.categories || {};
+  const customCategories = samples.customCategories || {};
+  let label;
+  if (BUILTIN_CATEGORY_IDS.includes(catId)) {
+    label = (dictCategories[catId] && dictCategories[catId].label) || catId;
+  } else if (customCategories[catId]) {
+    label = customCategories[catId].label || catId;
+  } else {
+    label = catId;
+  }
+
+  if (elements.learningCurrentCatLabel) {
+    elements.learningCurrentCatLabel.textContent = label;
+  }
+  if (elements.learningSampleCount) {
+    elements.learningSampleCount.textContent = `${tagArray.length} 个样本`;
+  }
+}
+
+/**
+ * 渲染学习模型状态
+ * - 更新学习中心底部的模型状态文本
+ * - 同步设置面板中的 3 个 info-value（模型状态/样本数/类别数）
+ */
+export function renderLearningModelStatus() {
+  const ll = appState.settings.localLearning;
+  if (!ll) return;
+
+  const trained = ll.modelTrained === true;
+  const sampleCount = ll.sampleCount || 0;
+  const categoryCount = ll.categoryCount || 0;
+
+  // 学习中心底部状态文本
+  if (elements.learningModelStatusText) {
+    if (trained) {
+      let text = `✓ 已训练 · ${sampleCount} 样本 · ${categoryCount} 类别`;
+      if (ll.lastTrainedAt) {
+        try {
+          const d = new Date(ll.lastTrainedAt);
+          text += ` · ${d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
+        } catch (e) { /* 忽略时间格式化错误 */ }
+      }
+      elements.learningModelStatusText.textContent = text;
+      elements.learningModelStatusText.classList.add('trained');
+      elements.learningModelStatusText.classList.remove('untrained');
+    } else {
+      elements.learningModelStatusText.textContent = '模型未训练';
+      elements.learningModelStatusText.classList.add('untrained');
+      elements.learningModelStatusText.classList.remove('trained');
+    }
+  }
+
+  // 设置面板 info-value 同步
+  if (elements.learningModelStatusInfo) {
+    elements.learningModelStatusInfo.textContent = trained ? '已训练' : '未训练';
+  }
+  if (elements.learningSampleCountInfo) {
+    elements.learningSampleCountInfo.textContent = String(sampleCount);
+  }
+  if (elements.learningCategoryCountInfo) {
+    elements.learningCategoryCountInfo.textContent = String(categoryCount);
+  }
+}
+

@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, shell, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { pathToFileURL } = require('url');
 
 app.setName('Luo-fe的本地提示词管理器');
 
@@ -919,6 +920,535 @@ ipcMain.handle('save-export-file', async (event, defaultName, content) => {
     return { success: true, filePath };
   } catch (err) {
     return { success: false, error: err.message };
+  }
+});
+
+// ============ 本地分词分类器 IPC ============
+
+// classifier-engine.js 是 ESM 模块，main.js 是 CommonJS，使用 dynamic import 加载
+let tokenizerEngine = null;     // ESM 动态导入缓存
+let learnerEngine = null;       // learner.js ESM 动态导入缓存
+let loadedDictionary = null;    // 合并后的词典缓存
+let loadedDictionaryAt = 0;     // 词典加载时间戳
+let tokenizerDir = null;        // tokenizer 数据目录缓存
+let loadedLearnedSamples = null; // 用户学习样本缓存
+let loadedLearnedModel = null;   // 训练好的模型缓存
+let learningSettingsCache = null; // 学习设置缓存（从 settings.json 读取）
+
+function getTokenizerDir() {
+  if (!tokenizerDir) {
+    tokenizerDir = path.join(getAppDataDir(), 'tokenizer');
+  }
+  if (!fs.existsSync(tokenizerDir)) {
+    fs.mkdirSync(tokenizerDir, { recursive: true });
+  }
+  return tokenizerDir;
+}
+
+function getBuiltinDictionaryPath() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'dictionaries', 'danbooru-tags.json');
+  }
+  return path.join(__dirname, 'resources', 'dictionaries', 'danbooru-tags.json');
+}
+
+// asar 内备份词典路径（主词典丢失时的二级 fallback）
+function getAsarFallbackDictionaryPath() {
+  return path.join(__dirname, 'src', 'assets', 'danbooru-tags-fallback.json');
+}
+
+// 学习样本文件路径
+function getLearnedSamplesPath() {
+  return path.join(getTokenizerDir(), 'learned-samples.json');
+}
+
+// 学习模型文件路径
+function getLearnedModelPath() {
+  return path.join(getTokenizerDir(), 'learned-model.json');
+}
+
+// 懒加载 classifier-engine.js（ESM），缓存到 tokenizerEngine
+async function loadTokenizerEngine() {
+  if (!tokenizerEngine) {
+    const modulePath = path.join(__dirname, 'src', 'modules', 'classifier-engine.js');
+    const moduleUrl = pathToFileURL(modulePath).href;
+    tokenizerEngine = await import(moduleUrl);
+  }
+  return tokenizerEngine;
+}
+
+// 懒加载 learner.js（ESM），缓存到 learnerEngine
+async function loadLearnerEngine() {
+  if (!learnerEngine) {
+    const modulePath = path.join(__dirname, 'src', 'modules', 'learner.js');
+    const moduleUrl = pathToFileURL(modulePath).href;
+    learnerEngine = await import(moduleUrl);
+  }
+  return learnerEngine;
+}
+
+// 读取内置词典（主路径失败时 fallback 到 asar 内备份）
+async function readBuiltinDictionary() {
+  const primaryPath = getBuiltinDictionaryPath();
+  try {
+    const raw = await fs.promises.readFile(primaryPath, 'utf8');
+    return { dict: JSON.parse(raw), path: primaryPath, fallback: false };
+  } catch (e) {
+    // 主路径失败，尝试 asar 内备份
+    const fallbackPath = getAsarFallbackDictionaryPath();
+    const raw = await fs.promises.readFile(fallbackPath, 'utf8');
+    return { dict: JSON.parse(raw), path: fallbackPath, fallback: true };
+  }
+}
+
+// 读取内置词典并与用户自定义规则 + 学习样本自定义类别合并，结果缓存到 loadedDictionary
+async function loadDictionaryInternal() {
+  const engine = await loadTokenizerEngine();
+  const { dict: baseDict, path: usedPath, fallback } = await readBuiltinDictionary();
+
+  let customRules = null;
+  try {
+    const customPath = path.join(getTokenizerDir(), 'custom-rules.json');
+    const customRaw = await fs.promises.readFile(customPath, 'utf8');
+    customRules = JSON.parse(customRaw);
+  } catch (e) {
+    // 自定义规则文件不存在或解析失败，跳过（不影响内置词典加载）
+  }
+
+  const merged = engine.mergeDictionary(baseDict, customRules);
+
+  // 合并学习样本中的自定义类别定义到 dictionary.categories
+  try {
+    const samples = await loadLearnedSamplesInternal();
+    if (samples && samples.customCategories && typeof samples.customCategories === 'object') {
+      if (!merged.categories || typeof merged.categories !== 'object') {
+        merged.categories = {};
+      }
+      for (const [catId, catDef] of Object.entries(samples.customCategories)) {
+        if (catDef && typeof catDef === 'object') {
+          merged.categories[catId] = JSON.parse(JSON.stringify(catDef));
+        }
+      }
+    }
+  } catch (e) {
+    // 学习样本加载失败不影响词典加载
+  }
+
+  // 记录词典来源（用于诊断面板）
+  merged._meta = merged._meta || {};
+  merged._meta.dictPath = usedPath;
+  merged._meta.usedFallback = fallback;
+
+  loadedDictionary = merged;
+  loadedDictionaryAt = Date.now();
+  return merged;
+}
+
+// 读取学习样本文件（缓存到 loadedLearnedSamples）
+async function loadLearnedSamplesInternal() {
+  if (loadedLearnedSamples !== null) {
+    return loadedLearnedSamples;
+  }
+  try {
+    const samplesPath = getLearnedSamplesPath();
+    const raw = await fs.promises.readFile(samplesPath, 'utf8');
+    const samples = JSON.parse(raw);
+    // 兼容旧格式：确保 categories 和 customCategories 字段存在
+    if (!samples.categories) samples.categories = {};
+    if (!samples.customCategories) samples.customCategories = {};
+    loadedLearnedSamples = samples;
+    return samples;
+  } catch (e) {
+    // 文件不存在或解析失败，返回空结构
+    const empty = { version: 1, categories: {}, customCategories: {}, updatedAt: 0 };
+    return empty;
+  }
+}
+
+// 保存学习样本（全量覆盖），并使词典缓存失效（因 customCategories 可能变化）
+async function saveLearnedSamplesInternal(samples) {
+  const samplesPath = getLearnedSamplesPath();
+  const data = {
+    version: 1,
+    categories: samples.categories || {},
+    customCategories: samples.customCategories || {},
+    updatedAt: Date.now()
+  };
+  await fs.promises.writeFile(samplesPath, JSON.stringify(data, null, 2), 'utf-8');
+  loadedLearnedSamples = data;
+  // 自定义类别可能变化，使词典缓存失效以便重新合并
+  loadedDictionary = null;
+  return data;
+}
+
+// 读取学习模型文件（缓存到 loadedLearnedModel）
+async function loadLearnedModelInternal() {
+  if (loadedLearnedModel !== null) {
+    return loadedLearnedModel;
+  }
+  try {
+    const modelPath = getLearnedModelPath();
+    const raw = await fs.promises.readFile(modelPath, 'utf8');
+    const model = JSON.parse(raw);
+    loadedLearnedModel = model;
+    return model;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 训练模型：读取样本 → trainModel → 写入 learned-model.json → 使缓存失效
+async function trainModelInternal() {
+  const learner = await loadLearnerEngine();
+  const samples = await loadLearnedSamplesInternal();
+  // 统计有效类别数（每类至少 minSamples 个样本）
+  const minSamples = 3;
+  const allCats = new Set([
+    ...Object.keys(samples.categories || {}),
+    ...Object.keys(samples.customCategories || {})
+  ]);
+  let validCats = 0;
+  for (const catId of allCats) {
+    const tags = (samples.categories?.[catId] || []).filter(t => t && typeof t === 'string');
+    if (tags.length >= minSamples) validCats++;
+  }
+  if (validCats < 2) {
+    return { success: false, error: `有效类别不足（至少需要 2 个类别各 ≥${minSamples} 个样本），当前有效类别 ${validCats} 个` };
+  }
+  const model = learner.trainModel(samples, { alpha: 1.0, minSamples });
+  model.samplesHash = learner.hashSamples(samples);
+  const modelPath = getLearnedModelPath();
+  await fs.promises.writeFile(modelPath, JSON.stringify(model), 'utf-8');
+  // 使缓存失效，下次 classify 时重新加载
+  loadedLearnedModel = null;
+  return { success: true, stats: model.stats, trainedAt: model.trainedAt };
+}
+
+// 读取学习设置（从 settings.json，含 enabled / minConfidence）
+// 学习设置存储在用户数据目录的 settings.json 中
+async function loadLearningSettings() {
+  if (learningSettingsCache !== null) {
+    return learningSettingsCache;
+  }
+  const defaults = { enabled: false, minConfidence: 0.6 };
+  try {
+    const settingsPath = path.join(getAppDataDir(), 'settings.json');
+    const raw = await fs.promises.readFile(settingsPath, 'utf8');
+    const settings = JSON.parse(raw);
+    learningSettingsCache = {
+      // 显式 === true 才启用：修复 settings.localLearning 存在但 enabled 字段缺失时被误启用的问题
+      enabled: settings.localLearning?.enabled === true,
+      minConfidence: Number(settings.localLearning?.minConfidence) || 0.6
+    };
+    return learningSettingsCache;
+  } catch (e) {
+    return defaults;
+  }
+}
+
+// 使学习设置缓存失效（设置保存后调用）
+function invalidateLearningSettings() {
+  learningSettingsCache = null;
+}
+
+ipcMain.handle('tokenizer-load-dictionary', async () => {
+  try {
+    const dictionary = await loadDictionaryInternal();
+    return {
+      success: true,
+      dictionary,
+      stats: {
+        tagCount: Object.keys(dictionary.tags || {}).length,
+        categoryCount: Object.keys(dictionary.categories || {}).length,
+        version: dictionary.version
+      },
+      meta: dictionary._meta || {}
+    };
+  } catch (e) {
+    return { success: false, error: e.message, code: e.code || 'OTHER' };
+  }
+});
+
+ipcMain.handle('tokenizer-classify', async (event, tagsString) => {
+  try {
+    const engine = await loadTokenizerEngine();
+    if (loadedDictionary === null) {
+      await loadDictionaryInternal();
+    }
+    // 读取学习设置与模型
+    const learningSettings = await loadLearningSettings();
+    let learnedModel = null;
+    let predictor = null;
+    if (learningSettings.enabled) {
+      learnedModel = await loadLearnedModelInternal();
+      if (learnedModel) {
+        const learner = await loadLearnerEngine();
+        predictor = learner.predictTag;
+      }
+    }
+    const result = engine.classifyTags(tagsString, loadedDictionary, {
+      learningEnabled: learningSettings.enabled,
+      learnedModel,
+      predictor,
+      minConfidence: learningSettings.minConfidence
+    });
+    return { success: true, results: result.results };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('tokenizer-read-dictionary', async () => {
+  try {
+    const dictionary = await loadDictionaryInternal();
+    return {
+      success: true,
+      dictionary,
+      stats: {
+        tagCount: Object.keys(dictionary.tags || {}).length,
+        categoryCount: Object.keys(dictionary.categories || {}).length,
+        version: dictionary.version
+      },
+      meta: dictionary._meta || {}
+    };
+  } catch (e) {
+    return { success: false, error: e.message, code: e.code || 'OTHER' };
+  }
+});
+
+ipcMain.handle('tokenizer-save-custom-rules', async (event, jsonString) => {
+  try {
+    // 步骤 1：JSON 格式校验
+    try {
+      JSON.parse(jsonString);
+    } catch (e) {
+      return { success: false, error: 'JSON 格式错误: ' + e.message };
+    }
+    // 步骤 2：写入文件（保留原始字符串以保持用户格式化）
+    const customPath = path.join(getTokenizerDir(), 'custom-rules.json');
+    await fs.promises.writeFile(customPath, jsonString, 'utf-8');
+    // 步骤 3：清除词典缓存，下次 classify 时自动重新加载
+    loadedDictionary = null;
+    // 步骤 4：自定义规则变化可能影响分类，使学习模型缓存也失效
+    loadedLearnedModel = null;
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('tokenizer-read-custom-rules', async () => {
+  try {
+    const rulesPath = path.join(getTokenizerDir(), 'custom-rules.json');
+    try {
+      const content = await fs.promises.readFile(rulesPath, 'utf8');
+      // 校验是否为合法 JSON
+      JSON.parse(content);
+      return { success: true, content: content };
+    } catch (e) {
+      if (e.code === 'ENOENT') {
+        // 文件不存在，返回空模板
+        const template = '{\n  "categories": {},\n  "tags": {}\n}';
+        return { success: true, content: template, isEmpty: true };
+      }
+      // 文件存在但 JSON 非法
+      return { success: true, content: '{\n  "categories": {},\n  "tags": {}\n}', isEmpty: true, parseError: e.message };
+    }
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+// ============ 学习模型 IPC ============
+
+// 读取学习样本
+ipcMain.handle('tokenizer-load-samples', async () => {
+  try {
+    const samples = await loadLearnedSamplesInternal();
+    const stats = {
+      categoryCount: Object.keys(samples.categories || {}).length,
+      customCategoryCount: Object.keys(samples.customCategories || {}).length,
+      totalSamples: Object.values(samples.categories || {}).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0)
+    };
+    return { success: true, samples, stats };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+// 保存学习样本（全量覆盖）
+ipcMain.handle('tokenizer-save-samples', async (event, samples) => {
+  try {
+    if (!samples || typeof samples !== 'object') {
+      return { success: false, error: 'samples 必须是对象' };
+    }
+    const data = await saveLearnedSamplesInternal(samples);
+    const stats = {
+      categoryCount: Object.keys(data.categories || {}).length,
+      customCategoryCount: Object.keys(data.customCategories || {}).length,
+      totalSamples: Object.values(data.categories || {}).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0)
+    };
+    return { success: true, stats };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+// 训练模型
+ipcMain.handle('tokenizer-train', async () => {
+  try {
+    const result = await trainModelInternal();
+    return result;
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+// 读取学习模型状态
+ipcMain.handle('tokenizer-load-model', async () => {
+  try {
+    const learner = await loadLearnerEngine();
+    const model = await loadLearnedModelInternal();
+    const usable = learner.isModelUsable(model);
+    const stats = model ? {
+      sampleCount: model.stats?.sampleCount || 0,
+      categoryCount: model.stats?.categoryCount || 0,
+      featureCount: model.stats?.featureCount || 0,
+      trainedAt: model.trainedAt || 0
+    } : null;
+    return { success: true, model, stats, usable };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+// 删除学习模型
+ipcMain.handle('tokenizer-delete-model', async () => {
+  try {
+    const modelPath = getLearnedModelPath();
+    try {
+      await fs.promises.unlink(modelPath);
+    } catch (e) {
+      // 文件不存在视为成功
+    }
+    loadedLearnedModel = null;
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+// 词典可靠性诊断
+ipcMain.handle('tokenizer-diagnostic', async () => {
+  const errors = [];
+  const result = {
+    success: true,
+    builtinDictPath: getBuiltinDictionaryPath(),
+    asarFallbackPath: getAsarFallbackDictionaryPath(),
+    builtinDictExists: false,
+    builtinDictSize: 0,
+    customRulesPath: path.join(getTokenizerDir(), 'custom-rules.json'),
+    samplesPath: getLearnedSamplesPath(),
+    modelPath: getLearnedModelPath(),
+    errors,
+    // 内存中词典加载状态
+    dictLoadedInMemory: loadedDictionary !== null,
+    dictLoadedAt: loadedDictionaryAt || null,
+    dictTagCount: loadedDictionary ? Object.keys(loadedDictionary.tags || {}).length : 0,
+    dictCategoryCount: loadedDictionary ? Object.keys(loadedDictionary.categories || {}).length : 0,
+    dictUsedFallback: loadedDictionary?._meta?.usedFallback === true,
+    dictMetaPath: loadedDictionary?._meta?.dictPath || null,
+    // 学习设置状态
+    learningSettingsEnabled: learningSettingsCache?.enabled === true,
+    learningSettingsMinConfidence: learningSettingsCache?.minConfidence ?? 0.6,
+    learningSettingsCacheLoaded: learningSettingsCache !== null
+  };
+  // 检查内置词典
+  try {
+    const stat = await fs.promises.stat(result.builtinDictPath);
+    result.builtinDictExists = true;
+    result.builtinDictSize = stat.size;
+  } catch (e) {
+    errors.push(`内置词典缺失: ${result.builtinDictPath} (${e.code})`);
+  }
+  // 校验内置词典 JSON
+  if (result.builtinDictExists) {
+    try {
+      JSON.parse(await fs.promises.readFile(result.builtinDictPath, 'utf8'));
+    } catch (e) {
+      errors.push(`内置词典 JSON 解析失败: ${e.message}`);
+    }
+  }
+  // 检查 asar 备份
+  try {
+    await fs.promises.stat(result.asarFallbackPath);
+    result.asarFallbackExists = true;
+  } catch (e) {
+    result.asarFallbackExists = false;
+    errors.push(`asar 备份缺失: ${result.asarFallbackPath}`);
+  }
+  // 检查自定义规则 + 统计标签/类别数
+  try {
+    await fs.promises.stat(result.customRulesPath);
+    result.customRulesExists = true;
+    try {
+      const customRaw = await fs.promises.readFile(result.customRulesPath, 'utf8');
+      const customRules = JSON.parse(customRaw);
+      result.customRulesTagCount = Object.keys(customRules.tags || {}).length;
+      result.customRulesCategoryCount = Object.keys(customRules.categories || {}).length;
+    } catch (e) {
+      errors.push(`自定义规则 JSON 解析失败: ${e.message}`);
+    }
+  } catch (e) {
+    result.customRulesExists = false;
+  }
+  // 检查学习样本 + 统计类别/标签数
+  try {
+    const stat = await fs.promises.stat(result.samplesPath);
+    result.samplesExists = true;
+    result.samplesSize = stat.size;
+    try {
+      const samples = await loadLearnedSamplesInternal();
+      result.learnedSamplesCategoryCount = Object.keys(samples.categories || {}).length;
+      result.learnedSamplesCustomCategoryCount = Object.keys(samples.customCategories || {}).length;
+      result.learnedSamplesTotalTags = Object.values(samples.categories || {})
+        .reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0);
+    } catch (e) {
+      errors.push(`学习样本统计失败: ${e.message}`);
+    }
+  } catch (e) {
+    result.samplesExists = false;
+  }
+  // 检查模型
+  try {
+    const stat = await fs.promises.stat(result.modelPath);
+    result.modelExists = true;
+    result.modelSize = stat.size;
+  } catch (e) {
+    result.modelExists = false;
+  }
+  return result;
+});
+
+// 保存学习设置（设置面板保存时调用）
+ipcMain.handle('tokenizer-save-learning-settings', async (event, settings) => {
+  try {
+    const settingsPath = path.join(getAppDataDir(), 'settings.json');
+    let existing = {};
+    try {
+      existing = JSON.parse(await fs.promises.readFile(settingsPath, 'utf8'));
+    } catch (e) {
+      // 文件不存在，使用空对象
+    }
+    existing.localLearning = {
+      enabled: !!settings.enabled,
+      minConfidence: Number(settings.minConfidence) || 0.6
+    };
+    await fs.promises.writeFile(settingsPath, JSON.stringify(existing, null, 2), 'utf-8');
+    invalidateLearningSettings();
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
   }
 });
 

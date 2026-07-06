@@ -24,21 +24,62 @@ const appState = {
       includeOriginal: true,
       includeTranslation: true,
       connector: ', ',
-      order: 'original-first'
+      order: 'original-first',
+      appendConnector: false
     },
     exportShortcut: 'Ctrl+Shift+E',
     exportShortcutTarget: 'clipboard',
+    exportShortcutAppendConnector: true,
     previewImage: {
       limitEnabled: true,
       maxDimension: 200,
       displaySize: 220
+    },
+    // 布局自定义设置
+    customLayout: {
+      locked: false,                 // 锁死布局：禁用响应式，窗口缩放时按比例等比缩放
+      direction: 'row',              // 布局方向：'row' 三栏并排 | 'column' 单栏堆叠
+      panels: {
+        category: { ratio: 20, order: 0 },  // 类别卡片（ratio = flex-grow 比例）
+        prompt:   { ratio: 50, order: 1 }, // 提示词卡片
+        preview:  { ratio: 30, order: 2 }   // 已选提示词卡片（整个右侧面板）
+      }
+    },
+    // 本地分词分类器设置（持久化于 settings）
+    localTokenizer: {
+      enabled: true,                 // 是否启用本地分词分类器
+      customRulesLoaded: false,      // 用户自定义规则是否已加载
+      lastDictVersion: null          // 上次加载的词典版本号
+    },
+    // 学习模型设置（持久化于 settings.json 主进程文件，这里仅作 UI 状态镜像）
+    localLearning: {
+      enabled: false,                // 是否启用学习模型辅助分类
+      minConfidence: 0.6,            // 置信度阈值
+      modelTrained: false,           // 模型是否已训练
+      lastTrainedAt: null,           // 上次训练时间戳
+      sampleCount: 0,                // 样本总数
+      categoryCount: 0               // 类别数
     }
   },
   promptUsage: {},
   batchMode: false,
   batchSelected: new Set(),
   bgImageData: null,
-  dataVersion: DATA_VERSION
+  dataVersion: DATA_VERSION,
+  // 运行时字段（不持久化）：分词分类器词典缓存
+  tokenizerCache: {
+    dictionary: null,                // 已加载的词典对象（合并内置 + 自定义规则后）
+    lastLoadAt: 0                    // 上次加载时间戳（ms），用于失效判断
+  },
+  // 运行时字段（不持久化）：分词分类器当前结果列表
+  // 每项形如 {tag, category, subgroup, matched, source, selected, imported}
+  tokenizerResults: [],
+  // 运行时字段（不持久化）：学习模型缓存
+  learningCache: {
+    samples: null,                   // 用户学习样本对象
+    model: null,                     // 训练好的模型（仅用于状态展示，预测在主进程执行）
+    lastLoadAt: 0                    // 上次加载时间戳
+  }
 };
 
 let _notificationHandler = null;
@@ -186,6 +227,41 @@ function loadSettings() {
         };
         delete data.previewImage;
       }
+      // 深度合并 customLayout（含 panels 嵌套），避免部分缓存覆盖默认值
+      if (data.customLayout) {
+        const mergedPanels = {
+          category: { ...appState.settings.customLayout.panels.category, ...(data.customLayout.panels?.category || {}) },
+          prompt:   { ...appState.settings.customLayout.panels.prompt,   ...(data.customLayout.panels?.prompt   || {}) },
+          preview:  { ...appState.settings.customLayout.panels.preview,  ...(data.customLayout.panels?.preview  || {}) }
+        };
+        appState.settings.customLayout = {
+          locked: data.customLayout.locked ?? appState.settings.customLayout.locked,
+          direction: data.customLayout.direction || appState.settings.customLayout.direction,
+          panels: mergedPanels
+        };
+        delete data.customLayout;
+      }
+      // 深度合并 localTokenizer，避免旧版缓存（无字段）或部分缓存覆盖默认值
+      if (data.localTokenizer) {
+        appState.settings.localTokenizer = {
+          enabled: data.localTokenizer.enabled ?? appState.settings.localTokenizer.enabled,
+          customRulesLoaded: data.localTokenizer.customRulesLoaded ?? appState.settings.localTokenizer.customRulesLoaded,
+          lastDictVersion: data.localTokenizer.lastDictVersion ?? appState.settings.localTokenizer.lastDictVersion
+        };
+        delete data.localTokenizer;
+      }
+      // 深度合并 localLearning
+      if (data.localLearning) {
+        appState.settings.localLearning = {
+          enabled: data.localLearning.enabled ?? appState.settings.localLearning.enabled,
+          minConfidence: data.localLearning.minConfidence ?? appState.settings.localLearning.minConfidence,
+          modelTrained: data.localLearning.modelTrained ?? appState.settings.localLearning.modelTrained,
+          lastTrainedAt: data.localLearning.lastTrainedAt ?? appState.settings.localLearning.lastTrainedAt,
+          sampleCount: data.localLearning.sampleCount ?? appState.settings.localLearning.sampleCount,
+          categoryCount: data.localLearning.categoryCount ?? appState.settings.localLearning.categoryCount
+        };
+        delete data.localLearning;
+      }
       Object.assign(appState.settings, data);
     }
   } catch (error) {
@@ -213,6 +289,41 @@ async function loadSettingsFromCache() {
           ...cached.previewImage
         };
         delete cached.previewImage;
+      }
+      // 深度合并 customLayout（含 panels 嵌套），避免部分缓存覆盖默认值
+      if (cached.customLayout) {
+        const mergedPanels = {
+          category: { ...appState.settings.customLayout.panels.category, ...(cached.customLayout.panels?.category || {}) },
+          prompt:   { ...appState.settings.customLayout.panels.prompt,   ...(cached.customLayout.panels?.prompt   || {}) },
+          preview:  { ...appState.settings.customLayout.panels.preview,  ...(cached.customLayout.panels?.preview  || {}) }
+        };
+        appState.settings.customLayout = {
+          locked: cached.customLayout.locked ?? appState.settings.customLayout.locked,
+          direction: cached.customLayout.direction || appState.settings.customLayout.direction,
+          panels: mergedPanels
+        };
+        delete cached.customLayout;
+      }
+      // 深度合并 localTokenizer，避免旧版缓存（无字段）或部分缓存覆盖默认值
+      if (cached.localTokenizer) {
+        appState.settings.localTokenizer = {
+          enabled: cached.localTokenizer.enabled ?? appState.settings.localTokenizer.enabled,
+          customRulesLoaded: cached.localTokenizer.customRulesLoaded ?? appState.settings.localTokenizer.customRulesLoaded,
+          lastDictVersion: cached.localTokenizer.lastDictVersion ?? appState.settings.localTokenizer.lastDictVersion
+        };
+        delete cached.localTokenizer;
+      }
+      // 深度合并 localLearning
+      if (cached.localLearning) {
+        appState.settings.localLearning = {
+          enabled: cached.localLearning.enabled ?? appState.settings.localLearning.enabled,
+          minConfidence: cached.localLearning.minConfidence ?? appState.settings.localLearning.minConfidence,
+          modelTrained: cached.localLearning.modelTrained ?? appState.settings.localLearning.modelTrained,
+          lastTrainedAt: cached.localLearning.lastTrainedAt ?? appState.settings.localLearning.lastTrainedAt,
+          sampleCount: cached.localLearning.sampleCount ?? appState.settings.localLearning.sampleCount,
+          categoryCount: cached.localLearning.categoryCount ?? appState.settings.localLearning.categoryCount
+        };
+        delete cached.localLearning;
       }
       Object.assign(appState.settings, cached);
       return true;

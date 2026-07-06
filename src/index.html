@@ -21,6 +21,9 @@
                 <button id="translate-all-btn" class="btn btn-secondary">
                     <i class="fa fa-language"></i> 一键翻译
                 </button>
+                <button id="tokenizer-btn" class="nav-btn" title="本地分词分类器">
+                    <i class="fas fa-tags"></i>
+                </button>
                 <div class="window-controls" id="window-controls">
                     <button class="window-control-btn minimize" id="win-minimize" title="最小化" aria-label="最小化">
                         <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5" width="12" height="1.5" fill="currentColor"/></svg>
@@ -116,41 +119,66 @@
                 </div>
                 <div class="selected-prompts-resize-handle" id="selected-prompts-resize-handle"></div>
 
-                <div class="preview-section">
-                    <h3>组合预览</h3>
-                    <div id="preview-output" class="preview-output">
-                        <p class="placeholder">请选择提示词以预览组合效果</p>
-                    </div>
-                </div>
-
-                <div class="export-section">
-                    <button id="export-btn" class="btn btn-primary btn-large">
-                        <i class="fa fa-download"></i> 导出提示词
-                    </button>
-                </div>
-
-                <div class="random-section">
-                    <h3>随机生成</h3>
-                    <div class="random-controls">
-                        <div class="category-selection">
-                            <label>选择类别:</label>
-                            <div id="random-category-selector" class="category-checkboxes">
-                            </div>
+                <div class="preview-scroll-content">
+                    <div class="preview-section">
+                        <h3>组合预览</h3>
+                        <div id="preview-output" class="preview-output">
+                            <p class="placeholder">请选择提示词以预览组合效果</p>
                         </div>
-                        <button id="random-generate-btn" class="btn btn-primary btn-large">
-                            <i class="fa fa-random"></i> 随机来一组
+                    </div>
+
+                    <div class="export-section">
+                        <button id="export-btn" class="btn btn-primary btn-large">
+                            <i class="fa fa-download"></i> 导出提示词
                         </button>
                     </div>
-                    <div id="random-result" class="random-result">
-                        <p class="placeholder">请选择类别并点击"随机来一组"</p>
-                    </div>
-                </div>
 
-                <div class="examples-section">
-                    <h3>示例组合</h3>
+                    <div class="random-section">
+                        <h3>随机生成</h3>
+                        <div class="random-controls">
+                            <div class="category-selection">
+                                <label>选择类别:</label>
+                                <div id="random-category-selector" class="category-checkboxes">
+                                </div>
+                            </div>
+                            <button id="random-generate-btn" class="btn btn-primary btn-large">
+                                <i class="fa fa-random"></i> 随机来一组
+                            </button>
+                        </div>
+                        <div id="random-result" class="random-result">
+                            <p class="placeholder">请选择类别并点击"随机来一组"</p>
+                        </div>
+                    </div>
                 </div>
             </aside>
         </main>
+
+        <!-- 布局自定义编辑模式工具栏（仅 body.layout-edit-mode 时显示） -->
+        <div id="layout-edit-toolbar" class="layout-edit-toolbar" aria-hidden="true">
+            <div class="layout-edit-toolbar-inner">
+                <span class="layout-edit-title"><i class="fa fa-columns"></i> 布局编辑模式</span>
+                <span class="layout-edit-hint">拖拽边框调整大小 · 拖拽卡片头部换位</span>
+                <div class="layout-edit-direction">
+                    <button id="layout-edit-three-col" class="btn btn-secondary btn-small layout-dir-btn active" title="三栏布局">
+                        <i class="fa fa-columns"></i> 三栏
+                    </button>
+                    <button id="layout-edit-single-col" class="btn btn-secondary btn-small layout-dir-btn" title="单栏布局">
+                        <i class="fa fa-square"></i> 单栏
+                    </button>
+                </div>
+                <div class="layout-edit-actions">
+                    <button id="layout-edit-reset" class="btn btn-secondary btn-small">
+                        <i class="fa fa-undo"></i> 恢复默认
+                    </button>
+                    <button id="layout-edit-cancel" class="btn btn-secondary btn-small">
+                        <i class="fa fa-times"></i> 取消
+                    </button>
+                    <button id="layout-edit-save" class="btn btn-primary btn-small">
+                        <i class="fa fa-check"></i> 保存
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="category-modal" class="modal" role="dialog" aria-modal="true">
@@ -314,6 +342,25 @@
                     </div>
                 </div>
                 <div class="settings-section">
+                    <h4>布局自定义</h4>
+                    <p class="settings-hint">自定义类别卡片、提示词卡片、已选提示词卡片（整个右侧面板）的相对位置和大小。</p>
+                    <div class="layout-actions">
+                        <button id="layout-customize-btn" class="btn btn-primary btn-small">
+                            <i class="fa fa-columns"></i> 卡片布局自定义
+                        </button>
+                        <div class="setting-item layout-lock-item">
+                            <label class="switch">
+                                <input type="checkbox" id="layout-lock-toggle">
+                                <span class="slider round"></span>
+                            </label>
+                            <span>锁死布局（禁用响应式）</span>
+                        </div>
+                        <button id="layout-reset-btn" class="btn btn-secondary btn-small">
+                            <i class="fa fa-undo"></i> 恢复默认布局
+                        </button>
+                    </div>
+                </div>
+                <div class="settings-section">
                     <h4>翻译设置</h4>
                     <div class="setting-item">
                         <label class="switch">
@@ -403,6 +450,13 @@
                             <input type="text" id="rcc-custom-connector" class="form-input" placeholder="自定义符号" style="width:100px;display:none">
                         </div>
                         <div class="setting-item">
+                            <label class="switch">
+                                <input type="checkbox" id="rcc-append-connector">
+                                <span class="slider round"></span>
+                            </label>
+                            <span>复制后追加连结符号（方便继续粘贴拼接）</span>
+                        </div>
+                        <div class="setting-item">
                             <label>排列顺序:</label>
                             <div class="radio-group" style="margin-bottom:0">
                                 <label><input type="radio" name="rcc-order" value="original-first" checked> 原词在前</label>
@@ -430,6 +484,13 @@
                             <option value="markdown">导出为Markdown文件</option>
                             <option value="js">导出为JS文件</option>
                         </select>
+                    </div>
+                    <div class="setting-item">
+                        <label class="switch">
+                            <input type="checkbox" id="export-shortcut-append-connector" checked>
+                            <span class="slider round"></span>
+                        </label>
+                        <span>复制到剪贴板时追加连结符号（默认逗号空格）</span>
                     </div>
                     <p class="settings-desc">点击输入框后按下组合键设置快捷键（默认: Ctrl+Shift+E）。选择"复制到剪贴板"时将选中提示词的原词以英文逗号隔开复制到剪贴板；选择文件导出时将选中提示词的类别、词语和翻译导出为对应格式文件，可选择保存位置。</p>
                 </div>
@@ -494,10 +555,156 @@
                         </button>
                     </div>
                 </div>
+                <div class="settings-section">
+                    <h4>本地分词分类器</h4>
+                    <div class="setting-row">
+                        <label class="setting-label">
+                            <span>启用本地分词分类器</span>
+                            <input type="checkbox" id="tokenizer-enabled-checkbox">
+                        </label>
+                    </div>
+                    <div class="tokenizer-info-grid">
+                        <div class="info-item"><span class="info-label">词典版本</span><span class="info-value" id="tokenizer-version">-</span></div>
+                        <div class="info-item"><span class="info-label">标签总数</span><span class="info-value" id="tokenizer-tag-count">-</span></div>
+                        <div class="info-item"><span class="info-label">分类数</span><span class="info-value" id="tokenizer-category-count">-</span></div>
+                    </div>
+                    <button id="tokenizer-edit-rules-btn" class="toolbar-btn"><i class="fas fa-edit"></i> 编辑自定义规则</button>
+                </div>
+                <!-- 学习模型辅助分类设置区 -->
+                <div class="settings-section">
+                    <h4>学习模型辅助分类</h4>
+                    <div class="setting-row">
+                        <label class="setting-label">
+                            <span>启用学习模型辅助分类</span>
+                            <input type="checkbox" id="learning-enabled-checkbox">
+                        </label>
+                    </div>
+                    <div class="setting-row">
+                        <label class="setting-label">
+                            <span>置信度阈值</span>
+                            <select id="learning-min-confidence-select">
+                                <option value="0.5">0.5（宽松）</option>
+                                <option value="0.6">0.6（推荐）</option>
+                                <option value="0.7">0.7（严格）</option>
+                                <option value="0.8">0.8（极严格）</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="tokenizer-info-grid">
+                        <div class="info-item"><span class="info-label">模型状态</span><span class="info-value" id="learning-model-status">未训练</span></div>
+                        <div class="info-item"><span class="info-label">样本数</span><span class="info-value" id="learning-sample-count">0</span></div>
+                        <div class="info-item"><span class="info-label">类别数</span><span class="info-value" id="learning-category-count">0</span></div>
+                    </div>
+                    <button id="open-learning-modal-btn" class="toolbar-btn primary"><i class="fas fa-brain"></i> 打开学习中心</button>
+                </div>
+                <!-- 词典与模型诊断区 -->
+                <div class="settings-section">
+                    <h4>词典与模型诊断</h4>
+                    <button id="tokenizer-diagnostic-btn" class="toolbar-btn"><i class="fas fa-stethoscope"></i> 运行诊断</button>
+                    <pre id="tokenizer-diagnostic-info" class="diagnostic-info">点击"运行诊断"查看词典与模型文件状态</pre>
+                </div>
             </div>
             <div class="modal-footer">
                 <button id="save-settings-btn" class="btn btn-primary">保存设置</button>
                 <button id="cancel-settings-btn" class="btn btn-secondary">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="tokenizer-modal" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content tokenizer-modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-tags"></i> 本地分词分类器</h3>
+                <span class="close">×</span>
+            </div>
+            <div class="modal-body">
+                <!-- 输入区 -->
+                <div class="tokenizer-input-area">
+                    <textarea id="tokenizer-input" class="tokenizer-textarea" rows="4" placeholder="粘贴逗号分隔的标签，例如：1girl, 1boy, thighhighs, sex, on bed, highres"></textarea>
+                    <button id="tokenizer-classify-btn" class="primary-btn"><i class="fas fa-magic"></i> 开始分类</button>
+                </div>
+
+                <!-- 结果区 -->
+                <div id="tokenizer-results" class="tokenizer-results"></div>
+
+                <!-- 工具栏 -->
+                <div class="tokenizer-toolbar">
+                    <div class="tokenizer-toolbar-left">
+                        <span class="tokenizer-stats" id="tokenizer-stats"></span>
+                    </div>
+                    <div class="tokenizer-toolbar-right">
+                        <button id="tokenizer-select-all-btn" class="toolbar-btn" disabled><i class="fas fa-check-double"></i> 全选</button>
+                        <button id="tokenizer-delete-selected-btn" class="toolbar-btn danger" disabled><i class="fas fa-trash"></i> 删除选中</button>
+                        <button id="tokenizer-move-btn" class="toolbar-btn" disabled><i class="fas fa-folder-tree"></i> 移动到分组</button>
+                        <button id="tokenizer-import-btn" class="toolbar-btn primary" disabled><i class="fas fa-file-import"></i> 导入到分类</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tokenizer-rules-editor-modal" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content" style="width: 720px; max-width: 90vw; max-height: 85vh;">
+            <div class="modal-header">
+                <h3><i class="fas fa-edit"></i> 编辑自定义规则</h3>
+                <span class="close">×</span>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+                    自定义规则为 JSON 格式，包含 <code>categories</code>（可新增/覆盖类别）和 <code>tags</code>（标签映射，覆盖内置词典同名标签）。每条 tag 映射格式：<code>"tag_name": ["category", "subgroup"]</code> 或 <code>"tag_name": ["category"]</code>。
+                </p>
+                <textarea id="tokenizer-rules-textarea" class="tokenizer-textarea" style="min-height: 320px; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.85rem; resize: vertical;"></textarea>
+                <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+                    <button id="tokenizer-rules-cancel-btn" class="toolbar-btn"><i class="fas fa-times"></i> 取消</button>
+                    <button id="tokenizer-rules-save-btn" class="toolbar-btn primary"><i class="fas fa-save"></i> 保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 学习中心 modal -->
+    <div id="learning-modal" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content learning-modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-brain"></i> 学习中心</h3>
+                <span class="close">×</span>
+            </div>
+            <div class="modal-body learning-modal-body">
+                <!-- 左侧：类别列表 -->
+                <div class="learning-sidebar">
+                    <div class="learning-sidebar-header">
+                        <span class="learning-sidebar-title">类别</span>
+                        <div class="learning-sidebar-actions">
+                            <button id="learning-add-category-btn" class="toolbar-btn" title="新增自定义类别"><i class="fas fa-plus"></i></button>
+                            <button id="learning-rename-category-btn" class="toolbar-btn" title="重命名当前类别"><i class="fas fa-i-cursor"></i></button>
+                            <button id="learning-delete-category-btn" class="toolbar-btn danger" title="删除当前类别"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <div id="learning-category-list" class="learning-category-list"></div>
+                </div>
+                <!-- 右侧：样本编辑区 -->
+                <div class="learning-main">
+                    <div class="learning-main-header">
+                        <span id="learning-current-cat-label" class="learning-current-cat-label">请选择或新增类别</span>
+                        <span id="learning-sample-count" class="learning-sample-count">0 个样本</span>
+                    </div>
+                    <textarea id="learning-samples-textarea" class="learning-samples-textarea" placeholder="每行一个标签，或用逗号分隔。例如：&#10;1girl&#10;hatsune miku&#10;white thighhighs"></textarea>
+                    <div class="learning-main-actions">
+                        <input type="file" id="learning-import-file-input" accept=".txt" style="display:none">
+                        <button id="learning-import-category-btn" class="toolbar-btn" title="从软件已有分类导入提示词到当前学习类别"><i class="fas fa-folder-tree"></i> 从分类导入</button>
+                        <button id="learning-import-file-btn" class="toolbar-btn"><i class="fas fa-file-import"></i> 从 .txt 导入</button>
+                        <button id="learning-save-samples-btn" class="toolbar-btn primary"><i class="fas fa-save"></i> 保存样本</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer learning-modal-footer">
+                <div class="learning-model-status-area">
+                    <span id="learning-model-status-text" class="learning-model-status-text">模型未训练</span>
+                </div>
+                <div class="learning-footer-actions">
+                    <button id="learning-delete-model-btn" class="toolbar-btn danger"><i class="fas fa-trash"></i> 删除模型</button>
+                    <button id="learning-train-btn" class="toolbar-btn primary"><i class="fas fa-brain"></i> 一键学习</button>
+                </div>
             </div>
         </div>
     </div>
@@ -507,6 +714,15 @@
             <h3>移动到分类</h3>
             <div id="batch-move-list" class="batch-move-list"></div>
             <button id="batch-move-cancel-btn" class="btn btn-secondary batch-move-cancel-full">取消</button>
+        </div>
+    </div>
+
+    <div id="learning-import-category-modal" class="batch-move-modal" role="dialog" aria-modal="true">
+        <div class="batch-move-content">
+            <h3>从软件分类导入样本</h3>
+            <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 0.6rem 0;line-height:1.4;">选择一个软件分类，将该分类下所有提示词导入到当前学习类别（自动去重，不会自动保存）</p>
+            <div id="learning-import-category-list" class="batch-move-list"></div>
+            <button id="learning-import-category-cancel-btn" class="btn btn-secondary batch-move-cancel-full">取消</button>
         </div>
     </div>
 

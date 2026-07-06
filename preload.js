@@ -29,5 +29,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resetDataDirectory: () => ipcRenderer.invoke('reset-data-directory'),
   relaunchApp: () => ipcRenderer.invoke('relaunch-app'),
   setDataDirectoryPrompted: () => ipcRenderer.invoke('set-data-directory-prompted'),
-  openDataDirectory: () => ipcRenderer.invoke('open-data-directory')
+  openDataDirectory: () => ipcRenderer.invoke('open-data-directory'),
+  // 本地分词分类器
+  tokenizerLoadDictionary: () => ipcRenderer.invoke('tokenizer-load-dictionary'),
+  tokenizerClassify: (tagsString) => ipcRenderer.invoke('tokenizer-classify', tagsString),
+  tokenizerReadDictionary: () => ipcRenderer.invoke('tokenizer-read-dictionary'),
+  tokenizerSaveCustomRules: (jsonString) => ipcRenderer.invoke('tokenizer-save-custom-rules', jsonString),
+  tokenizerReadCustomRules: () => ipcRenderer.invoke('tokenizer-read-custom-rules'),
+  // 学习模型
+  tokenizerLoadSamples: () => ipcRenderer.invoke('tokenizer-load-samples'),
+  tokenizerSaveSamples: (samples) => ipcRenderer.invoke('tokenizer-save-samples', samples),
+  tokenizerTrain: () => ipcRenderer.invoke('tokenizer-train'),
+  tokenizerLoadModel: () => ipcRenderer.invoke('tokenizer-load-model'),
+  tokenizerDeleteModel: () => ipcRenderer.invoke('tokenizer-delete-model'),
+  tokenizerDiagnostic: () => ipcRenderer.invoke('tokenizer-diagnostic'),
+  tokenizerSaveLearningSettings: (settings) => ipcRenderer.invoke('tokenizer-save-learning-settings', settings)
 });

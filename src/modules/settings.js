@@ -2,6 +2,7 @@ import { appState, saveSettingsToStorage, savePromptUsage } from './state.js';
 import { BG_IMAGE_MAX_SIZE } from './constants.js';
 import { getCacheInfo, clearAllCache, isCacheAvailable } from './cache.js';
 import { parseCsvLine } from './utils.js';
+import { applyTokenizerEnabledState } from './tokenizer.js';
 
 let _showNotification = () => {};
 let _applyBackgroundSettings = () => {};
@@ -14,6 +15,9 @@ let _saveData = () => {};
 let _getElements = () => ({});
 let _showConfirm = async () => false;
 let _savePromptUsage = () => {};
+let _applyCustomLayout = () => {};
+let _enterLayoutEditMode = () => {};
+let _resetLayoutToDefault = () => {};
 
 export function initSettings(handlers) {
   _showNotification = handlers.showNotification || _showNotification;
@@ -27,6 +31,9 @@ export function initSettings(handlers) {
   _showConfirm = handlers.showConfirm || _showConfirm;
   _savePromptUsage = handlers.savePromptUsage || _savePromptUsage;
   _getElements = handlers.getElements || _getElements;
+  _applyCustomLayout = handlers.applyCustomLayout || _applyCustomLayout;
+  _enterLayoutEditMode = handlers.enterLayoutEditMode || _enterLayoutEditMode;
+  _resetLayoutToDefault = handlers.resetLayoutToDefault || _resetLayoutToDefault;
 }
 
 export function openSettingsModal(elements) {
@@ -45,21 +52,54 @@ export function openSettingsModal(elements) {
   loadRightClickCopySettings(elements);
   if (elements.exportShortcutInput) elements.exportShortcutInput.value = appState.settings.exportShortcut || 'Ctrl+Shift+E';
   if (elements.exportShortcutTarget) elements.exportShortcutTarget.value = appState.settings.exportShortcutTarget || 'clipboard';
+  if (elements.exportShortcutAppendConnector) elements.exportShortcutAppendConnector.checked = appState.settings.exportShortcutAppendConnector !== false;
   if (elements.previewImageLimitEnabled) elements.previewImageLimitEnabled.checked = (appState.settings.previewImage || {}).limitEnabled !== false;
   if (elements.previewImageMaxDimension) elements.previewImageMaxDimension.value = (appState.settings.previewImage || {}).maxDimension || 200;
   if (elements.previewImageDisplaySize) elements.previewImageDisplaySize.value = (appState.settings.previewImage || {}).displaySize || 220;
+  // 加载布局自定义设置
+  if (elements.layoutLockToggle) {
+    elements.layoutLockToggle.checked = !!(appState.settings.customLayout && appState.settings.customLayout.locked);
+  }
+  // 本地分词分类器：开关 + 词典统计信息
+  if (elements.tokenizerEnabledCheckbox) {
+    elements.tokenizerEnabledCheckbox.checked = appState.settings.localTokenizer?.enabled !== false;
+  }
+  // 学习模型：开关 + 置信度阈值回填（enabled 默认 false，需用户手动开启）
+  if (elements.learningEnabledCheckbox) {
+    elements.learningEnabledCheckbox.checked = appState.settings.localLearning?.enabled === true;
+  }
+  if (elements.learningMinConfidenceSelect) {
+    elements.learningMinConfidenceSelect.value = String(appState.settings.localLearning?.minConfidence ?? 0.6);
+  }
+  loadTokenizerStats(elements);
   updateBgPreview(elements);
   elements.settingsModal.style.display = 'block';
   refreshCacheInfo();
   loadDataDirectoryInfo(elements);
 }
 
+/**
+ * 异步加载本地分词分类器词典统计信息（版本 / 标签数 / 分类数）
+ * 不阻塞设置弹窗的显示；IPC 不可用时静默失败
+ * @param {Object} elements - DOM 元素缓存
+ */
+function loadTokenizerStats(elements) {
+  if (!window.electronAPI?.tokenizerReadDictionary) return;
+  Promise.resolve(window.electronAPI.tokenizerReadDictionary()).then(res => {
+    if (!res || !res.success) return;
+    if (elements.tokenizerVersion) elements.tokenizerVersion.textContent = res.stats?.version || '-';
+    if (elements.tokenizerTagCount) elements.tokenizerTagCount.textContent = res.stats?.tagCount ?? '-';
+    if (elements.tokenizerCategoryCount) elements.tokenizerCategoryCount.textContent = res.stats?.categoryCount ?? '-';
+  }).catch(() => { /* 优雅降级：IPC 未就绪或失败时静默 */ });
+}
+
 function loadRightClickCopySettings(elements) {
   const config = appState.settings.rightClickCopyConfig || {
-    includeOriginal: true, includeTranslation: true, connector: ', ', order: 'original-first'
+    includeOriginal: true, includeTranslation: true, connector: ', ', order: 'original-first', appendConnector: false
   };
   if (elements.rccIncludeOriginal) elements.rccIncludeOriginal.checked = config.includeOriginal !== false;
   if (elements.rccIncludeTranslation) elements.rccIncludeTranslation.checked = config.includeTranslation !== false;
+  if (elements.rccAppendConnector) elements.rccAppendConnector.checked = config.appendConnector === true;
   if (elements.rccConnector) {
     const connector = config.connector || ', ';
     const options = [...elements.rccConnector.options].map(o => o.value);
@@ -100,6 +140,11 @@ function updateRightClickCopyPreview(elements) {
     if (connector === 'custom') connector = config.customConnector || ', ';
     preview = parts.join(connector);
   }
+  if (config.appendConnector) {
+    let conn = config.connector;
+    if (conn === 'custom') conn = config.customConnector || ', ';
+    preview += conn;
+  }
   elements.rccPreviewText.textContent = preview;
 }
 
@@ -117,11 +162,12 @@ function collectRightClickCopyConfig(elements) {
     includeTranslation: elements.rccIncludeTranslation ? elements.rccIncludeTranslation.checked : true,
     connector: finalConnector,
     customConnector: customConnector,
-    order: orderRadio ? orderRadio.value : 'original-first'
+    order: orderRadio ? orderRadio.value : 'original-first',
+    appendConnector: elements.rccAppendConnector ? elements.rccAppendConnector.checked : false
   };
 }
 
-export function saveSettings(elements) {
+export async function saveSettings(elements) {
   appState.settings.translationEnabled = elements.translationEnabled.checked;
   appState.settings.useOnlineTranslation = elements.onlineTranslation.checked;
   appState.settings.autoTranslateNewWords = elements.autoTranslateNew.checked;
@@ -142,6 +188,9 @@ export function saveSettings(elements) {
   if (elements.exportShortcutTarget) {
     appState.settings.exportShortcutTarget = elements.exportShortcutTarget.value;
   }
+  if (elements.exportShortcutAppendConnector) {
+    appState.settings.exportShortcutAppendConnector = elements.exportShortcutAppendConnector.checked;
+  }
   if (elements.previewImageLimitEnabled || elements.previewImageMaxDimension || elements.previewImageDisplaySize) {
     const maxDim = elements.previewImageMaxDimension ? parseInt(elements.previewImageMaxDimension.value) : 200;
     const dispSize = elements.previewImageDisplaySize ? parseInt(elements.previewImageDisplaySize.value) : 220;
@@ -151,8 +200,30 @@ export function saveSettings(elements) {
       displaySize: (dispSize >= 100 && dispSize <= 500) ? dispSize : 220
     };
   }
+  // 保存布局自定义设置（仅锁死开关，其他在编辑模式中保存）
+  if (elements.layoutLockToggle && appState.settings.customLayout) {
+    appState.settings.customLayout.locked = elements.layoutLockToggle.checked;
+  }
+  // 本地分词分类器：收集开关值并同步导航栏按钮状态
+  if (appState.settings.localTokenizer && elements.tokenizerEnabledCheckbox) {
+    appState.settings.localTokenizer.enabled = elements.tokenizerEnabledCheckbox.checked;
+  }
+  // 学习模型：收集开关 + 置信度，同步到主进程 settings.json
+  if (appState.settings.localLearning) {
+    appState.settings.localLearning.enabled = elements.learningEnabledCheckbox ? elements.learningEnabledCheckbox.checked === true : false;
+    appState.settings.localLearning.minConfidence = elements.learningMinConfidenceSelect ? (parseFloat(elements.learningMinConfidenceSelect.value) || 0.6) : 0.6;
+    // 非阻塞同步到主进程持久化（settings.json 的 localLearning 字段）
+    window.electronAPI?.tokenizerSaveLearningSettings?.({
+      enabled: appState.settings.localLearning.enabled,
+      minConfidence: appState.settings.localLearning.minConfidence
+    }).catch(e => console.warn('保存学习设置到主进程失败:', e));
+  }
   saveSettingsToStorage();
   _applyBackgroundSettings();
+  // 应用布局设置（更新 CSS 变量、order、locked class）
+  if (typeof _applyCustomLayout === 'function') _applyCustomLayout();
+  // 同步本地分词分类器导航栏按钮的禁用态
+  applyTokenizerEnabledState?.();
   elements.settingsModal.style.display = 'none';
   _showNotification('设置已保存', 'success');
   if (appState.selectedCategoryId) _renderPromptList(appState.selectedCategoryId);
@@ -556,9 +627,27 @@ export function bindSettingsEvents(elements) {
   if (elements.rccIncludeTranslation) {
     elements.rccIncludeTranslation.addEventListener('change', () => updateRightClickCopyPreview(elements));
   }
+  if (elements.rccAppendConnector) {
+    elements.rccAppendConnector.addEventListener('change', () => updateRightClickCopyPreview(elements));
+  }
   document.querySelectorAll('input[name="rcc-order"]').forEach(radio => {
     radio.addEventListener('change', () => updateRightClickCopyPreview(elements));
   });
+
+  // 布局自定义事件绑定
+  if (elements.layoutCustomizeBtn) {
+    elements.layoutCustomizeBtn.addEventListener('click', () => {
+      elements.settingsModal.style.display = 'none';
+      _enterLayoutEditMode();
+    });
+  }
+  if (elements.layoutResetBtn) {
+    elements.layoutResetBtn.addEventListener('click', () => {
+      _resetLayoutToDefault();
+      if (elements.layoutLockToggle) elements.layoutLockToggle.checked = false;
+      _showNotification('已恢复默认布局', 'success');
+    });
+  }
 
   if (elements.exportShortcutInput) {
     elements.exportShortcutInput.addEventListener('focus', () => {

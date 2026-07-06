@@ -1,13 +1,15 @@
 import { appState, loadData, loadDataFromCache, saveData, loadSettings, loadSettingsFromCache, saveSettingsToStorage, loadTranslations, loadTranslationsFromCache, loadPromptUsage, loadUsageFromCache, savePromptUsage, recordPromptUsage, getFrequentPrompts, setNotificationHandler } from './state.js';
-import { DEFAULT_CATEGORIES, EXAMPLES, DATA_VERSION } from './constants.js';
+import { DEFAULT_CATEGORIES, DATA_VERSION } from './constants.js';
 import { getPromptText, getPromptTranslation, getCategoryById } from './utils.js';
 import { addCategory, addCategories, editCategory, deleteCategory, batchDeleteCategories, moveCategoryUp, moveCategoryDown, addPrompt, editPrompt, deletePrompt, batchImportPrompts, togglePrompt, selectAllPrompts, deselectAllPrompts, clearAllSelectedPrompts, isPromptSelected, updatePromptTranslation, syncSelectedPromptsTranslations, setDialogHandlers as setDataDialogHandlers } from './data.js';
 import { translateText, translateAllPrompts, setTranslateHandlers, setTranslateAllProgressCallback, getFallbackTranslation } from './translate.js';
 import { initSearch, initSearchEvents } from './search.js';
 import { initBatch, toggleBatchMode, exitBatchMode, updateBatchInfo, batchDeletePrompts, batchMovePrompts, performBatchMove, batchEditPrompts, initBatchEvents } from './batch.js';
 import { initSettings, openSettingsModal, saveSettings, handleBgImageUpload, clearBgImage, loadBgImageFromFile, updateBgPreview, applyBackgroundSettings, toggleBgClarityMode, applyBgClarityMode, bindSettingsEvents } from './settings.js';
-import { initRender, cacheElements, elements, renderCategoryList, renderCustomCategoryList, renderPromptList, renderSelectedPrompts, renderPreview, renderRandomCategorySelector, renderExamples, showNotification, showConfirmDialog, showInputDialog, renderCategoryPromptsList, toggleCategoryBatchMode, exitCategoryBatchMode, categoryBatchDelete, initPromptImageUpload } from './render.js';
-import { initEvents, bindEvents, bindSettingsEvents as bindSettingsEventsFromEvents, initSearchEvents as bindSearchEvents, initBatchEvents as bindBatchEvents, initSortEvents, initPreviewPanelResize } from './events.js';
+import { initRender, cacheElements, elements, renderCategoryList, renderCustomCategoryList, renderPromptList, renderSelectedPrompts, renderPreview, renderRandomCategorySelector, showNotification, showConfirmDialog, showInputDialog, renderCategoryPromptsList, toggleCategoryBatchMode, exitCategoryBatchMode, categoryBatchDelete, initPromptImageUpload, applyCustomLayout, openTokenizerModal, closeTokenizerModal, renderTokenizerResults, updateTokenizerToolbar, renderLearningCategoryList, renderLearningSamples, renderLearningModelStatus } from './render.js';
+import { initEvents, bindEvents, bindSettingsEvents as bindSettingsEventsFromEvents, initSearchEvents as bindSearchEvents, initBatchEvents as bindBatchEvents, initSortEvents, initPreviewPanelResize, enterLayoutEditMode, exitLayoutEditMode, resetLayoutToDefault, initLayoutCustomization } from './events.js';
+import { initTokenizer, initTokenizerDeferred, applyTokenizerEnabledState, loadDictionary } from './tokenizer.js';
+import { initLearning, initLearningDeferred, applyLearningEnabledState } from './learning.js';
 
 function selectCategory(categoryId) {
   appState.selectedCategoryId = categoryId;
@@ -77,24 +79,6 @@ function showRandomResult(message, type, promptText = '') {
     div.textContent = `"${promptText}"`;
     result.appendChild(div);
   }
-}
-
-function applyExample(example) {
-  appState.selectedPrompts = {};
-  Object.keys(example.combinations).forEach(categoryId => {
-    const category = getCategoryById(appState.categories, categoryId);
-    if (!category) return;
-    appState.selectedPrompts[categoryId] = [];
-    example.combinations[categoryId].forEach(promptText => {
-      const found = category.prompts.find(p => getPromptText(p) === promptText);
-      appState.selectedPrompts[categoryId].push(found && typeof found === 'object' ? { ...found } : { text: promptText, translation: '' });
-    });
-  });
-  renderPromptList();
-  renderSelectedPrompts();
-  renderPreview();
-  saveData();
-  showNotification('示例已应用');
 }
 
 function openExportModal() {
@@ -308,7 +292,10 @@ async function exportAllDataShortcut() {
   if (appState.selectedCategoryId) renderPromptList(appState.selectedCategoryId);
 
   if (target === 'clipboard') {
-    const text = selectedTexts.join(', ');
+    let text = selectedTexts.join(', ');
+    if (appState.settings.exportShortcutAppendConnector !== false) {
+      text += ', ';
+    }
     try {
       await navigator.clipboard.writeText(text);
       showNotification(`已复制 ${selectedCount} 个提示词到剪贴板`, 'success');
@@ -454,7 +441,7 @@ async function initApp() {
     openPromptModal, addPrompt, editPrompt,
     deletePrompt, batchImportPrompts, saveData, translateText,
     updatePromptTranslation, renderPromptList, renderSelectedPrompts,
-    renderPreview, applyExample, showConfirmDialog, showInputDialog,
+    renderPreview, showConfirmDialog, showInputDialog,
     getFrequentPrompts
   });
 
@@ -473,7 +460,8 @@ async function initApp() {
     renderPromptList, renderSelectedPrompts, renderCategoryList,
     renderRandomCategorySelector, saveData,
     showConfirm: showConfirmDialog, savePromptUsage,
-    getElements: () => elements
+    getElements: () => elements,
+    applyCustomLayout, enterLayoutEditMode, resetLayoutToDefault
   });
 
   initEvents(elements, {
@@ -486,7 +474,34 @@ async function initApp() {
     translateAllPrompts, showNotification, renderCustomCategoryList,
     sortPrompts, selectCategory, renderCategoryList, renderPromptList: () => renderPromptList(appState.selectedCategoryId),
     renderSelectedPrompts, renderPreview, saveData,
-    toggleCategoryBatchMode, exitCategoryBatchMode, categoryBatchDelete
+    toggleCategoryBatchMode, exitCategoryBatchMode, categoryBatchDelete,
+    applyCustomLayout, showNotification
+  });
+
+  // 本地分词分类器：注入依赖并绑定 modal 内事件
+  initTokenizer({
+    appState,
+    elements,
+    showConfirmDialog,
+    showNotification,
+    batchImportPrompts,
+    renderCategoryList,
+    renderPromptList,
+    openTokenizerModal,
+    closeTokenizerModal,
+    renderTokenizerResults,
+    updateTokenizerToolbar
+  });
+
+  // 学习模型：注入依赖并绑定学习中心事件
+  initLearning({
+    appState,
+    elements,
+    showConfirmDialog,
+    showNotification,
+    renderLearningCategoryList,
+    renderLearningSamples,
+    renderLearningModelStatus
   });
 
   renderCategoryList();
@@ -494,6 +509,8 @@ async function initApp() {
   bindEvents();
   bindSettingsEventsFromEvents();
   applyBgClarityMode();
+  // 初始化布局自定义（应用保存的布局）
+  initLayoutCustomization();
 
   // 关键路径：加载背景图（超时 2 秒，超时则先显示窗口，背景图稍后异步加载）
   const bgStart = performance.now();
@@ -523,7 +540,6 @@ async function initApp() {
 
   // 非关键初始化延迟到空闲时执行，不阻塞首屏交互
   const deferredInit = () => {
-    renderExamples();
     initPreviewPanelResize();
     bindSearchEvents();
     bindBatchEvents();
@@ -531,6 +547,11 @@ async function initApp() {
     initPromptImageUpload();
 
     migrateData();
+
+    // 本地分词分类器：应用启用态（词典懒加载，不在此处加载）
+    initTokenizerDeferred();
+    // 学习模型：应用启用态（懒加载，打开学习中心时才加载样本/模型）
+    initLearningDeferred();
   };
 
   if (window.requestIdleCallback) {

@@ -55,35 +55,6 @@ export const DEFAULT_CATEGORIES = [
   }
 ]
 
-export const EXAMPLES = [
-  {
-    name: '电影风格场景',
-    combinations: {
-      'perspective': ['from above', 'three-quarter view'],
-      'height': ['high angle', 'eye level'],
-      'lens_effect': ['shallow depth of field', 'cinematic lighting']
-    }
-  },
-  {
-    name: '产品摄影',
-    combinations: {
-      'perspective': ['three-quarter view', 'front view'],
-      'height': ['eye level', 'close-up'],
-      'composition': ['centered composition', 'negative space'],
-      'lens_effect': ['sharp focus', 'natural lighting']
-    }
-  },
-  {
-    name: '建筑摄影',
-    combinations: {
-      'perspective': ['aerial view', 'front view'],
-      'height': ['elevated view', 'ground level'],
-      'perspective_type': ['two-point perspective', 'linear perspective'],
-      'lens_params': ['wide angle', 'tilt-shift lens']
-    }
-  }
-]
-
 export const FALLBACK_TRANSLATIONS = {
   'man': '男人', 'woman': '女人', 'boy': '男孩', 'girl': '女孩', 'child': '儿童',
   'portrait': '肖像', 'landscape': '风景', 'close-up': '特写', 'wide shot': '广角镜头',
