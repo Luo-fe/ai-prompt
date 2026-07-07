@@ -1,6 +1,14 @@
-# Luo-fe 本地提示词管理器 v1.4.8
+# Luo-fe 本地提示词管理器 v1.4.9
 
 一款专为 AI 文生图设计的本地提示词管理工具，帮助用户高效组织、选择和导出提示词组合。
+
+## v1.4.9 软件图标修复
+
+修复安装后软件显示默认 Electron 图标而非自定义图标的问题：
+
+- **问题根因**：`icon.ico` 和 `icon.png` 被包含在 `files` 列表中，导致被打包进 `app.asar` 内部，electron-builder 的 rcedit 在设置 exe 图标时无法从 asar 中读取图标文件
+- **修复方案**：从 `files` 列表中移除图标文件，新增顶层 `icon` 配置，启用 `signAndEditExecutable` 允许 rcedit 正确设置 exe 图标资源
+- **验证结果**：打包日志显示 `signing with signtool.exe`，图标已成功嵌入 exe（包含 7 种尺寸：16x16/24x24/32x32/48x48/64x64/128x128/256x256）
 
 ## v1.4.8 从分类导入学习样本 + 词典诊断增强
 
