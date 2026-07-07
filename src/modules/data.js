@@ -27,17 +27,17 @@ export function setDialogHandlers(handlers) {
   if (handlers.renderCustomCategoryList) _renderCustomCategoryList = handlers.renderCustomCategoryList;
 }
 
-export function addCategory(name) {
+export function addCategory(name, parentId = null) {
   const trimmed = name.trim();
   if (!trimmed) return null;
-  const duplicate = appState.categories.some(cat => cat.name === trimmed);
-  if (duplicate) {
-    _showNotification('分类名称已存在', 'warning');
-    return null;
+  const existing = appState.categories.find(cat => cat.name === trimmed && cat.parentId === parentId);
+  if (existing) {
+    return existing;
   }
   const newCategory = {
     id: `custom_${appState.nextCategoryId++}`,
     name: trimmed,
+    parentId,
     prompts: []
   };
   appState.categories.push(newCategory);

@@ -76,3 +76,41 @@ export function parseCsvLine(line) {
   result.push(current);
   return result;
 }
+
+export function parseCategoryHierarchy(categoryName) {
+  return categoryName.split('-').map(s => s.trim()).filter(s => s);
+}
+
+export function getCategoryFullPath(categories, categoryOrId) {
+  if (!categoryOrId) return '';
+  let category = typeof categoryOrId === 'object' ? categoryOrId : getCategoryById(categories, categoryOrId);
+  if (!category) return '';
+  const path = [category.name];
+  let parentId = category.parentId;
+  while (parentId) {
+    const parent = getCategoryById(categories, parentId);
+    if (!parent) break;
+    path.unshift(parent.name);
+    parentId = parent.parentId;
+  }
+  return path.join('-');
+}
+
+export function getSubcategories(categories, parentId) {
+  return categories.filter(cat => cat.parentId === parentId);
+}
+
+export function getAllPromptsInHierarchy(categories, categoryId) {
+  const category = getCategoryById(categories, categoryId);
+  if (!category) return [];
+  const prompts = category.prompts.map(p => ({ prompt: p, categoryId }));
+  const collectPrompts = (pid) => {
+    const subs = getSubcategories(categories, pid);
+    subs.forEach(sub => {
+      prompts.push(...sub.prompts.map(p => ({ prompt: p, categoryId: sub.id })));
+      collectPrompts(sub.id);
+    });
+  };
+  collectPrompts(categoryId);
+  return prompts;
+}

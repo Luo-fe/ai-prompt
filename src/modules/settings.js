@@ -1,7 +1,7 @@
 import { appState, saveSettingsToStorage, savePromptUsage } from './state.js';
 import { BG_IMAGE_MAX_SIZE } from './constants.js';
 import { getCacheInfo, clearAllCache, isCacheAvailable } from './cache.js';
-import { parseCsvLine } from './utils.js';
+import { parseCsvLine, parseCategoryHierarchy, getCategoryById } from './utils.js';
 import { applyTokenizerEnabledState } from './tokenizer.js';
 
 let _showNotification = () => {};
@@ -531,17 +531,26 @@ export function bindSettingsEvents(elements) {
           const promptText = fields[textIdx] || '';
           const translation = transIdx !== -1 ? (fields[transIdx] || '') : '';
           if (!catName || !promptText) continue;
-          let category = appState.categories.find(c => c.name === catName);
-          if (!category) {
-            category = {
-              id: `custom_${appState.nextCategoryId++}`,
-              name: catName,
-              prompts: []
-            };
-            appState.categories.push(category);
+          const hierarchy = parseCategoryHierarchy(catName);
+          let currentParentId = null;
+          let lastCategory = null;
+          for (let j = 0; j < hierarchy.length; j++) {
+            const levelName = hierarchy[j];
+            let levelCategory = appState.categories.find(c => c.name === levelName && c.parentId === currentParentId);
+            if (!levelCategory) {
+              levelCategory = {
+                id: `custom_${appState.nextCategoryId++}`,
+                name: levelName,
+                parentId: currentParentId,
+                prompts: []
+              };
+              appState.categories.push(levelCategory);
+            }
+            lastCategory = levelCategory;
+            currentParentId = levelCategory.id;
           }
-          if (!category.prompts.some(p => (typeof p === 'object' && p !== null ? p.text : String(p)) === promptText)) {
-            category.prompts.push({ text: promptText, translation });
+          if (lastCategory && !lastCategory.prompts.some(p => (typeof p === 'object' && p !== null ? p.text : String(p)) === promptText)) {
+            lastCategory.prompts.push({ text: promptText, translation });
           }
         }
         _saveData();

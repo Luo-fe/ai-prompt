@@ -14,6 +14,7 @@ export { elements };
 
 let _categoryBatchMode = false;
 let _categoryBatchSelected = new Set();
+let _expandedCategories = new Set();
 
 export function cacheElements() {
   elements.categoryList = document.getElementById('category-list');
@@ -239,12 +240,31 @@ export function applyCustomLayout() {
   }
 }
 
-export function renderCategoryList() {
-  elements.categoryList.innerHTML = '';
-  const frag = document.createDocumentFragment();
-  appState.categories.forEach((category, index) => {
+function getCategoryLevel(category) {
+  let level = 0;
+  let parentId = category.parentId;
+  while (parentId) {
+    const parent = getCategoryById(appState.categories, parentId);
+    if (!parent) break;
+    level++;
+    parentId = parent.parentId;
+  }
+  return level;
+}
+
+function hasSubcategories(category) {
+  return appState.categories.some(cat => cat.parentId === category.id);
+}
+
+function renderCategoryTree(parentId, frag, depth) {
+  const children = appState.categories.filter(cat => cat.parentId === parentId);
+  children.forEach((category, index) => {
     const item = document.createElement('li');
-    item.className = `category-item ${appState.selectedCategoryId === category.id ? 'active' : ''}`;
+    const level = getCategoryLevel(category);
+    const hasSub = hasSubcategories(category);
+    const isExpanded = _expandedCategories.has(category.id);
+
+    item.className = `category-item ${appState.selectedCategoryId === category.id ? 'active' : ''} level-${level}`;
     item.dataset.categoryId = category.id;
 
     if (_categoryBatchMode) {
@@ -263,6 +283,26 @@ export function renderCategoryList() {
     const leftSection = document.createElement('div');
     leftSection.className = 'category-item-left';
 
+    if (hasSub) {
+      const expandBtn = document.createElement('button');
+      expandBtn.className = `category-expand-btn ${isExpanded ? 'expanded' : ''}`;
+      expandBtn.innerHTML = `<i class="fa ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}"></i>`;
+      expandBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (isExpanded) {
+          _expandedCategories.delete(category.id);
+        } else {
+          _expandedCategories.add(category.id);
+        }
+        renderCategoryList();
+      });
+      leftSection.appendChild(expandBtn);
+    } else {
+      const spacer = document.createElement('span');
+      spacer.className = 'category-expand-spacer';
+      leftSection.appendChild(spacer);
+    }
+
     if (!_categoryBatchMode) {
       const sortBtns = document.createElement('div');
       sortBtns.className = 'category-sort-btns';
@@ -276,7 +316,7 @@ export function renderCategoryList() {
       downBtn.className = 'category-sort-btn';
       downBtn.innerHTML = '<i class="fa fa-chevron-down"></i>';
       downBtn.title = '下移';
-      downBtn.disabled = index === appState.categories.length - 1;
+      downBtn.disabled = index === children.length - 1;
       downBtn.addEventListener('click', e => { e.stopPropagation(); handlers.moveCategoryDown(category.id); });
       sortBtns.appendChild(upBtn);
       sortBtns.appendChild(downBtn);
@@ -322,7 +362,17 @@ export function renderCategoryList() {
       handlers.selectCategory(category.id);
     });
     frag.appendChild(item);
+
+    if (hasSub && isExpanded) {
+      renderCategoryTree(category.id, frag, depth + 1);
+    }
   });
+}
+
+export function renderCategoryList() {
+  elements.categoryList.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  renderCategoryTree(null, frag, 0);
   elements.categoryList.appendChild(frag);
 }
 
@@ -383,8 +433,11 @@ export function renderPromptList(categoryId) {
     elements.frequentSection.classList.add('hidden');
     return;
   }
-  elements.currentCategoryTitle.textContent = category.name;
-  if (category.prompts.length === 0) {
+  const fullPath = getCategoryFullPath(appState.categories, category.id);
+  elements.currentCategoryTitle.textContent = fullPath || category.name;
+  const hasSub = hasSubcategories(category);
+  const promptsToRender = hasSub ? getAllPromptsInHierarchy(appState.categories, category.id) : category.prompts;
+  if (promptsToRender.length === 0) {
     elements.promptList.innerHTML = '<div class="no-prompts">此分类下暂无提示词</div>';
     elements.frequentSection.classList.add('hidden');
     return;
@@ -398,9 +451,11 @@ export function renderPromptList(categoryId) {
 
   elements.promptList.innerHTML = '';
   const frag = document.createDocumentFragment();
-  category.prompts.forEach(prompt => {
+  promptsToRender.forEach((promptData) => {
+    const prompt = promptData.prompt;
+    const catId = promptData.categoryId;
     const item = document.createElement('div');
-    const promptKey = createPromptKey(category.id, getPromptText(prompt));
+    const promptKey = createPromptKey(catId, getPromptText(prompt));
     const hasImage = typeof prompt === 'object' && prompt !== null && prompt.imagePath;
 
     const textContainer = document.createElement('div');
@@ -411,7 +466,7 @@ export function renderPromptList(categoryId) {
     textContainer.appendChild(text);
 
     if (appState.settings.translationEnabled) {
-      textContainer.appendChild(createTranslationUI(category.id, prompt));
+      textContainer.appendChild(createTranslationUI(catId, prompt));
     }
 
     if (hasImage) {
@@ -439,20 +494,20 @@ export function renderPromptList(categoryId) {
       });
     } else {
       // 正常模式：选用复选框 + 点击切换选用
-      item.className = `prompt-item ${handlers.isPromptSelected(category.id, prompt) ? 'selected' : ''}`;
+      item.className = `prompt-item ${handlers.isPromptSelected(catId, prompt) ? 'selected' : ''}`;
 
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.className = 'prompt-checkbox';
-      cb.checked = handlers.isPromptSelected(category.id, prompt);
-      cb.addEventListener('change', () => handlePromptToggle(category.id, prompt));
+      cb.checked = handlers.isPromptSelected(catId, prompt);
+      cb.addEventListener('change', () => handlePromptToggle(catId, prompt));
 
       item.appendChild(cb);
       item.appendChild(textContainer);
       item.addEventListener('click', e => {
         if (e.target !== cb && !e.target.closest('.editable-translation') && !e.target.closest('.inline-translate-btn') && !e.target.closest('.translation-edit-input') && !e.target.closest('.prompt-image-icon')) {
           cb.checked = !cb.checked;
-          handlePromptToggle(category.id, prompt);
+          handlePromptToggle(catId, prompt);
         }
       });
     }
@@ -469,7 +524,7 @@ export function renderPromptList(categoryId) {
       item.addEventListener('contextmenu', e => {
         e.preventDefault();
         _hideHoverPreview();
-        showPromptContextMenu(category.id, prompt, e.clientX, e.clientY);
+        showPromptContextMenu(catId, prompt, e.clientX, e.clientY);
       });
     }
     if (hasImage) {
@@ -609,7 +664,8 @@ export function renderSelectedPrompts() {
     group.className = 'selected-category-group';
     const title = document.createElement('h4');
     title.className = 'selected-category-title';
-    title.textContent = category.name;
+    const fullPath = getCategoryFullPath(appState.categories, category);
+    title.textContent = fullPath || category.name;
     group.appendChild(title);
 
     appState.selectedPrompts[categoryId].forEach(prompt => {

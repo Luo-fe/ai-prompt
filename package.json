@@ -1,14 +1,14 @@
 {
   "name": "luo-fe-prompt-manager",
-  "version": "1.4.9",
+  "version": "1.5.0",
   "description": "Luo-fe本地提示词管理器 - AI文生图提示词工具",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "build:nsis": "electron-builder --win nsis",
     "build:portable": "electron-builder --win portable",
-    "build:zip": "electron-builder --win dir && powershell -Command \"Compress-Archive -Path 'dist/win-unpacked/*' -DestinationPath 'dist/Luo-fe本地提示词管理器_v1.4.9_便携版.zip' -Force\"",
-    "build:all": "electron-builder --win nsis portable dir && powershell -Command \"Compress-Archive -Path 'dist/win-unpacked/*' -DestinationPath 'dist/Luo-fe本地提示词管理器_v1.4.9_便携版.zip' -Force\""
+    "build:zip": "electron-builder --win dir && powershell -Command \"Compress-Archive -Path 'dist/win-unpacked/*' -DestinationPath 'dist/Luo-fe本地提示词管理器_v1.5.0_便携版.zip' -Force\"",
+    "build:all": "electron-builder --win nsis portable dir && powershell -Command \"Compress-Archive -Path 'dist/win-unpacked/*' -DestinationPath 'dist/Luo-fe本地提示词管理器_v1.5.0_便携版.zip' -Force\""
   },
   "author": "Luo-fe",
   "productName": "Luo-fe的本地提示词管理器",
@@ -70,12 +70,12 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Luo-fe的本地提示词管理器",
-      "artifactName": "Luo-fe本地提示词管理器_v1.4.9_安装版.exe",
+      "artifactName": "Luo-fe本地提示词管理器_v1.5.0_安装版.exe",
       "include": "installer.nsh",
       "deleteAppDataOnUninstall": false
     },
     "portable": {
-      "artifactName": "Luo-fe本地提示词管理器_v1.4.9_便携版.exe"
+      "artifactName": "Luo-fe本地提示词管理器_v1.5.0_便携版.exe"
     },
     "asar": true,
     "asarUnpack": [],

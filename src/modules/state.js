@@ -107,6 +107,7 @@ function loadData() {
     appState.nextCategoryId = 1;
     appState.dataVersion = 0;
   }
+  migrateCategoryData();
   ensureDefaultCategories();
 }
 
@@ -119,6 +120,7 @@ async function loadDataFromCache() {
       appState.selectedPrompts = cached.selectedPrompts || {};
       appState.nextCategoryId = cached.nextCategoryId || 1;
       appState.dataVersion = cached.dataVersion || 0;
+      migrateCategoryData();
       ensureDefaultCategories();
       return true;
     }
@@ -184,6 +186,14 @@ function saveDataImmediate() {
   }
 }
 
+function migrateCategoryData() {
+  appState.categories.forEach(cat => {
+    if (cat.parentId === undefined) {
+      cat.parentId = null;
+    }
+  });
+}
+
 function ensureDefaultCategories() {
   for (const defaultCat of DEFAULT_CATEGORIES) {
     const existing = getCategoryById(appState.categories, defaultCat.id);
@@ -191,9 +201,13 @@ function ensureDefaultCategories() {
       appState.categories.push({
         ...defaultCat,
         isDefault: true,
+        parentId: null,
         prompts: defaultCat.prompts.map(p => typeof p === 'string' ? { text: p, translation: '' } : { ...p })
       });
     } else if (existing.isDefault) {
+      if (existing.parentId === undefined) {
+        existing.parentId = null;
+      }
       existing.prompts = existing.prompts.map(p => typeof p === 'string' ? { text: p, translation: '' } : p);
       for (const defaultPrompt of defaultCat.prompts) {
         const defaultText = typeof defaultPrompt === 'string' ? defaultPrompt : defaultPrompt.text;
@@ -475,6 +489,7 @@ export {
   saveData,
   saveDataImmediate,
   ensureDefaultCategories,
+  migrateCategoryData,
   loadSettings,
   loadSettingsFromCache,
   saveSettingsToStorage,
